@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ProjectOLDR/ProjectOLDR.vdproj" Type="Installer">
+    <Build />
+  </Project>
+  <Project Path="Project_OLDR/Project_OLDR.csproj" />
+</Solution>
