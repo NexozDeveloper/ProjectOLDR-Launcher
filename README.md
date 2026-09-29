@@ -1,1 +1,1 @@
-# Hello i finnaly decided, to put ProjectOLDR public see "LICENSE" File for more information, some script like SupabaseApi.cs is hided cuz it's server, and i don't want to leakserver things so yeah guys byeee have fun!
+# Hello everyone i finnaly decided, to put ProjectOLDR in public repo, see "LICENSE" File for more information of distribution etc... one script, is hided because it's the DB, and i don't want to leak DB things have fun!
