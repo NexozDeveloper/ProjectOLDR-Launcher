@@ -29,7 +29,7 @@ namespace ProjectOLDR
 
             if (resourceName == null)
             {
-                MessageBox.Show("Erreur : EmbeddedConfig.xml introuvable dans les ressources !");
+                MessageBox.Show("Erreur : EmbeddedConfig.xml not found in resources !");
                 return;
             }
 
@@ -56,7 +56,7 @@ namespace ProjectOLDR
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Erreur ConfigLoader / OpenSSL : " + ex.Message, "Erreur Critique", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Error ConfigLoader / OpenSSL : " + ex.Message, "Critical Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
