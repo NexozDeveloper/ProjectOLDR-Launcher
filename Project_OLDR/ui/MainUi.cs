@@ -9,7 +9,7 @@ namespace ProjectOLDR.UI
         public static readonly Color BackgroundColor = Color.Black;
         public static readonly Color AccentColor = Color.FromArgb(0, 150, 0);
         public static readonly Color DarkColor = Color.FromArgb(30, 30, 30);
-        public static readonly Color TextColor = Color.White; // test
+        public static readonly Color TextColor = Color.White; 
         public static readonly Color GrayTextColor = Color.Gray;
 
         public static readonly Font TitleFont = new Font("Segoe UI", 18, FontStyle.Bold);
