@@ -48,7 +48,7 @@ namespace ProjectOLDR
             this.FormClosed += GameLauncherForm_FormClosed;
 
             Label title = new Label();
-            title.Text = "SECRET NEIGHBOUR\n18 DECEMBER 2020";
+            title.Text = "ProjectOLDR Launcher\n Secret Neigbor";
             title.ForeColor = Color.White;
             title.Font = new Font("Segoe UI", 18, FontStyle.Bold);
             title.Size = new Size(480, 80);
