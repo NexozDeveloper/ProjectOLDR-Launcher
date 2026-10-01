@@ -35,7 +35,7 @@ namespace ProjectOLDR
             this.Icon = null;
 
             Label title = new Label();
-            title.Text = "SECRET NEIGHBOR\n18 DECEMBER 2020";
+            title.Text = "ProjectOLDR Launcher\nLogin Page";
             title.ForeColor = Color.White;
             title.Font = new Font("Segoe UI", 16, FontStyle.Bold);
             title.Size = new Size(380, 80);
