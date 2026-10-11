@@ -139,6 +139,28 @@ namespace ProjectOLDR
             }
         }
 
+        public static async Task<int> GetOnlinePlayersCountAsync()
+        {
+            try
+            {
+                string threshold = DateTime.UtcNow.AddSeconds(-35).ToString("o");
+                string url = $"rest/v1/user_presence?last_seen=gte.{Uri.EscapeDataString(threshold)}";
+                using (var response = await Client.GetAsync(url))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        JArray arr = JArray.Parse(body);
+                        return arr.Count;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return 1;
+        }
+
         public static async Task<bool> IsUserOnlineAsync(string username)
         {
             try
@@ -153,7 +175,7 @@ namespace ProjectOLDR
                         if (arr.Count > 0)
                         {
                             DateTime lastSeen = (DateTime)arr[0]["last_seen"];
-                            return (DateTime.UtcNow - lastSeen.ToUniversalTime()).TotalSeconds < 30;
+                            return (DateTime.UtcNow - lastSeen.ToUniversalTime()).TotalSeconds < 35;
                         }
                     }
                 }
@@ -164,10 +186,35 @@ namespace ProjectOLDR
             return false;
         }
 
+        public static async Task<bool> UserExistsAsync(string username)
+        {
+            try
+            {
+                string url = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(username)}";
+                using (var response = await Client.GetAsync(url))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        JArray arr = JArray.Parse(body);
+                        return arr.Count > 0;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return true;
+        }
+
         public static async Task<ApiResult> AddFriendAsync(string currentUsername, string targetUsername)
         {
             try
             {
+                bool exists = await UserExistsAsync(targetUsername);
+                if (!exists)
+                    return ApiResult.Fail("Player not found in database.");
+
                 string checkUrl = $"rest/v1/friends?or=(and(sender.eq.{Uri.EscapeDataString(currentUsername)},receiver.eq.{Uri.EscapeDataString(targetUsername)}),and(sender.eq.{Uri.EscapeDataString(targetUsername)},receiver.eq.{Uri.EscapeDataString(currentUsername)}))";
                 using (var checkResp = await Client.GetAsync(checkUrl))
                 {
@@ -234,6 +281,24 @@ namespace ProjectOLDR
             }
         }
 
+        public static async Task<ApiResult> DeclineFriendAsync(string currentUsername, string senderUsername)
+        {
+            try
+            {
+                string url = $"rest/v1/friends?sender=eq.{Uri.EscapeDataString(senderUsername)}&receiver=eq.{Uri.EscapeDataString(currentUsername)}";
+                using (var response = await Client.DeleteAsync(url))
+                {
+                    if (response.IsSuccessStatusCode)
+                        return ApiResult.Ok("Request declined.");
+                    return ApiResult.Fail("Failed to decline request.");
+                }
+            }
+            catch (Exception ex)
+            {
+                return ApiResult.Fail(ex.Message);
+            }
+        }
+
         public static async Task<ApiResult> GetFriendsDataAsync(string currentUsername)
         {
             try
@@ -292,18 +357,10 @@ namespace ProjectOLDR
                             if (string.IsNullOrEmpty(assetUrl))
                                 assetUrl = (string)rel["html_url"];
 
-                            string cleanTag = tag.TrimStart('v', 'V');
-                            string cleanCurrent = currentVersionStr.TrimStart('v', 'V');
+                            Version latestVer = NormalizeVersion(tag);
+                            Version curVer = NormalizeVersion(currentVersionStr);
 
-                            bool hasUpdate = false;
-                            if (Version.TryParse(cleanTag, out Version latestVer) && Version.TryParse(cleanCurrent, out Version curVer))
-                            {
-                                hasUpdate = latestVer > curVer;
-                            }
-                            else
-                            {
-                                hasUpdate = !string.Equals(cleanTag, cleanCurrent, StringComparison.OrdinalIgnoreCase);
-                            }
+                            bool hasUpdate = latestVer > curVer;
 
                             var outData = new
                             {
@@ -323,6 +380,21 @@ namespace ProjectOLDR
             }
 
             return ApiResult.Fail("No releases found.");
+        }
+
+        private static Version NormalizeVersion(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return new Version(1, 0, 0, 0);
+
+            string clean = raw.Trim().TrimStart('v', 'V');
+            string[] parts = clean.Split('.');
+            int major = parts.Length > 0 && int.TryParse(parts[0], out int v0) ? v0 : 1;
+            int minor = parts.Length > 1 && int.TryParse(parts[1], out int v1) ? v1 : 0;
+            int build = parts.Length > 2 && int.TryParse(parts[2], out int v2) ? v2 : 0;
+            int rev = parts.Length > 3 && int.TryParse(parts[3], out int v3) ? v3 : 0;
+
+            return new Version(major, minor, build, rev);
         }
 
         private static async Task<ApiResult> CallRpcAsync(string functionName, object payload)
