@@ -39,6 +39,7 @@ namespace ProjectOLDR
             InitializePaths();
 
             this.Shown += async (s, e) => await InitializeDashboardAsync();
+            this.FormClosed += GameLauncherForm_FormClosed;
         }
 
         private void BuildUI()
@@ -49,7 +50,6 @@ namespace ProjectOLDR
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.KeyPreview = true;
-            this.FormClosed += (s, e) => Application.Exit();
 
             this.Paint += (s, e) =>
             {
@@ -101,7 +101,7 @@ namespace ProjectOLDR
                 AutoSize = true
             };
 
-            Panel playersBadge = MainUi.CreateContainer(250, 14, 195, 36);
+            Panel playersBadge = MainUi.CreateContainer(240, 14, 205, 36);
             onlinePlayersLabel = new Label
             {
                 Text = "Players in launcher: ...",
@@ -120,7 +120,7 @@ namespace ProjectOLDR
             };
 
             logoutBtn = MainUi.CreateStyledButton("Sign Out", 580, 14, 104, 36, Color.FromArgb(40, 20, 25), MainUi.Danger);
-            logoutBtn.Click += (s, e) => this.Close();
+            logoutBtn.Click += async (s, e) => await SignOutAsync();
 
             topBar.Controls.Add(avatar);
             topBar.Controls.Add(userLabel);
@@ -224,7 +224,7 @@ namespace ProjectOLDR
             await RefreshDashboardStatsAsync();
             CheckAndExtractGame();
 
-            refreshTimer = new System.Windows.Forms.Timer { Interval = 15000 };
+            refreshTimer = new System.Windows.Forms.Timer { Interval = 3000 };
             refreshTimer.Tick += async (s, e) =>
             {
                 await SupabaseApi.UpdatePresenceAsync(currentUsername);
@@ -235,6 +235,9 @@ namespace ProjectOLDR
 
         private async Task RefreshDashboardStatsAsync()
         {
+            int count = await SupabaseApi.GetOnlinePlayersCountAsync();
+            onlinePlayersLabel.Text = $"Players in launcher: {count}";
+
             var res = await SupabaseApi.CheckDatabaseHealthAsync();
             if (res.Success)
             {
@@ -246,9 +249,35 @@ namespace ProjectOLDR
                 dbStatusLabel.Text = "● " + res.Message;
                 dbStatusLabel.ForeColor = MainUi.Danger;
             }
+        }
 
-            int count = await SupabaseApi.GetOnlinePlayersCountAsync();
-            onlinePlayersLabel.Text = $"Number of players in launcher: {count}";
+        private async Task SignOutAsync()
+        {
+            if (refreshTimer != null)
+            {
+                refreshTimer.Stop();
+                refreshTimer.Dispose();
+            }
+
+            await SupabaseApi.RemovePresenceAsync(currentUsername);
+            this.Close();
+        }
+
+        private async void GameLauncherForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (refreshTimer != null)
+            {
+                refreshTimer.Stop();
+                refreshTimer.Dispose();
+            }
+
+            try
+            {
+                await SupabaseApi.RemovePresenceAsync(currentUsername);
+            }
+            catch
+            {
+            }
         }
 
         private async Task CheckGitHubUpdateAsync()
