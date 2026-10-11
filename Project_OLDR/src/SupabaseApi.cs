@@ -13,21 +13,23 @@ namespace ProjectOLDR
     {
         public bool Success { get; private set; }
         public string Message { get; private set; }
+        public string Data { get; private set; }
 
-        public static ApiResult Ok(string message = "")
+        public static ApiResult Ok(string message = "", string data = "")
         {
-            return new ApiResult { Success = true, Message = message };
+            return new ApiResult { Success = true, Message = message, Data = data };
         }
 
         public static ApiResult Fail(string message)
         {
-            return new ApiResult { Success = false, Message = message };
+            return new ApiResult { Success = false, Message = message, Data = "" };
         }
     }
 
     public static class SupabaseApi
     {
         private static readonly HttpClient Client = CreateClient();
+        private static readonly HttpClient StatusClient = new HttpClient();
         private static readonly string ClientId = LoadClientId();
 
         private static HttpClient CreateClient()
@@ -44,10 +46,10 @@ namespace ProjectOLDR
         public static async Task<ApiResult> RegisterAsync(string username, string password)
         {
             if (string.IsNullOrWhiteSpace(username) || username.Length > 32)
-                return ApiResult.Fail("Invalid username (1 to 32 characters).");
+                return ApiResult.Fail("Username must be between 1 and 32 characters.");
 
             if (string.IsNullOrEmpty(password) || password.Length < 6 || password.Length > 128)
-                return ApiResult.Fail("The password must contain between 6 and 128 characters.");
+                return ApiResult.Fail("Password must contain between 6 and 128 characters.");
 
             var payload = new
             {
@@ -70,6 +72,259 @@ namespace ProjectOLDR
             return await CallRpcAsync("authenticate_launcher_user", payload);
         }
 
+        public static async Task<ApiResult> CheckDatabaseHealthAsync()
+        {
+            try
+            {
+                StatusClient.DefaultRequestHeaders.UserAgent.Clear();
+                StatusClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
+                using (var response = await StatusClient.GetAsync("https://status.supabase.com/api/v2/status.json"))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        JObject json = JObject.Parse(body);
+                        string indicator = (string)json["status"]?["indicator"] ?? "none";
+                        string description = (string)json["status"]?["description"] ?? "Operational";
+
+                        if (indicator == "none")
+                            return ApiResult.Ok("Supabase: Operational");
+
+                        return ApiResult.Fail($"Supabase: {description}");
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                using (var fallback = await Client.GetAsync("rest/v1/"))
+                {
+                    if (fallback.IsSuccessStatusCode)
+                        return ApiResult.Ok("Supabase: Operational");
+                }
+            }
+            catch
+            {
+            }
+
+            return ApiResult.Fail("Supabase: Offline");
+        }
+
+        public static async Task UpdatePresenceAsync(string username)
+        {
+            try
+            {
+                var payload = new
+                {
+                    username = username.Trim(),
+                    last_seen = DateTime.UtcNow.ToString("o")
+                };
+
+                string json = JsonConvert.SerializeObject(payload);
+                using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
+                {
+                    var req = new HttpRequestMessage(HttpMethod.Post, "rest/v1/user_presence")
+                    {
+                        Content = content
+                    };
+                    req.Headers.Add("Prefer", "resolution=merge-duplicates");
+                    await Client.SendAsync(req);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        public static async Task<bool> IsUserOnlineAsync(string username)
+        {
+            try
+            {
+                string url = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(username)}";
+                using (var response = await Client.GetAsync(url))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        JArray arr = JArray.Parse(body);
+                        if (arr.Count > 0)
+                        {
+                            DateTime lastSeen = (DateTime)arr[0]["last_seen"];
+                            return (DateTime.UtcNow - lastSeen.ToUniversalTime()).TotalSeconds < 30;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return false;
+        }
+
+        public static async Task<ApiResult> AddFriendAsync(string currentUsername, string targetUsername)
+        {
+            try
+            {
+                string checkUrl = $"rest/v1/friends?or=(and(sender.eq.{Uri.EscapeDataString(currentUsername)},receiver.eq.{Uri.EscapeDataString(targetUsername)}),and(sender.eq.{Uri.EscapeDataString(targetUsername)},receiver.eq.{Uri.EscapeDataString(currentUsername)}))";
+                using (var checkResp = await Client.GetAsync(checkUrl))
+                {
+                    if (checkResp.IsSuccessStatusCode)
+                    {
+                        string checkBody = await checkResp.Content.ReadAsStringAsync();
+                        JArray existing = JArray.Parse(checkBody);
+                        if (existing.Count > 0)
+                        {
+                            string status = (string)existing[0]["status"];
+                            if (status == "accepted")
+                                return ApiResult.Fail("Already in your friends list.");
+                            return ApiResult.Fail("A request is already pending.");
+                        }
+                    }
+                }
+
+                var record = new
+                {
+                    sender = currentUsername.Trim(),
+                    receiver = targetUsername.Trim(),
+                    status = "pending"
+                };
+
+                string json = JsonConvert.SerializeObject(record);
+                using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
+                using (var response = await Client.PostAsync("rest/v1/friends", content))
+                {
+                    if (response.IsSuccessStatusCode)
+                        return ApiResult.Ok("Friend request sent.");
+
+                    string err = await response.Content.ReadAsStringAsync();
+                    return ApiResult.Fail(ParseError(err, (int)response.StatusCode));
+                }
+            }
+            catch (Exception ex)
+            {
+                return ApiResult.Fail(ex.Message);
+            }
+        }
+
+        public static async Task<ApiResult> AcceptFriendAsync(string currentUsername, string senderUsername)
+        {
+            try
+            {
+                string url = $"rest/v1/friends?sender=eq.{Uri.EscapeDataString(senderUsername)}&receiver=eq.{Uri.EscapeDataString(currentUsername)}";
+                var update = new { status = "accepted" };
+                string json = JsonConvert.SerializeObject(update);
+
+                using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
+                {
+                    var req = new HttpRequestMessage(new HttpMethod("PATCH"), url) { Content = content };
+                    using (var response = await Client.SendAsync(req))
+                    {
+                        if (response.IsSuccessStatusCode)
+                            return ApiResult.Ok("Request accepted.");
+                        return ApiResult.Fail("Failed to accept request.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return ApiResult.Fail(ex.Message);
+            }
+        }
+
+        public static async Task<ApiResult> GetFriendsDataAsync(string currentUsername)
+        {
+            try
+            {
+                string url = $"rest/v1/friends?or=(sender.eq.{Uri.EscapeDataString(currentUsername)},receiver.eq.{Uri.EscapeDataString(currentUsername)})";
+                using (var response = await Client.GetAsync(url))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        return ApiResult.Ok("Success", body);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return ApiResult.Fail(ex.Message);
+            }
+            return ApiResult.Fail("Failed to fetch friends data.");
+        }
+
+        public static async Task<ApiResult> CheckGitHubUpdateAsync(string currentVersionStr)
+        {
+            try
+            {
+                using (var ghClient = new HttpClient())
+                {
+                    ghClient.DefaultRequestHeaders.UserAgent.Clear();
+                    ghClient.DefaultRequestHeaders.UserAgent.ParseAdd("ProjectOLDR-Launcher");
+
+                    using (var resp = await ghClient.GetAsync("https://api.github.com/repos/NexozDeveloper/ProjectOLDR-Launcher/releases/latest"))
+                    {
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            string body = await resp.Content.ReadAsStringAsync();
+                            JObject rel = JObject.Parse(body);
+                            string tag = (string)rel["tag_name"] ?? "";
+                            string assetUrl = "";
+
+                            JArray assets = (JArray)rel["assets"];
+                            if (assets != null && assets.Count > 0)
+                            {
+                                foreach (var a in assets)
+                                {
+                                    string name = (string)a["name"];
+                                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        assetUrl = (string)a["browser_download_url"];
+                                        break;
+                                    }
+                                }
+                                if (string.IsNullOrEmpty(assetUrl))
+                                    assetUrl = (string)assets[0]["browser_download_url"];
+                            }
+
+                            if (string.IsNullOrEmpty(assetUrl))
+                                assetUrl = (string)rel["html_url"];
+
+                            string cleanTag = tag.TrimStart('v', 'V');
+                            string cleanCurrent = currentVersionStr.TrimStart('v', 'V');
+
+                            bool hasUpdate = false;
+                            if (Version.TryParse(cleanTag, out Version latestVer) && Version.TryParse(cleanCurrent, out Version curVer))
+                            {
+                                hasUpdate = latestVer > curVer;
+                            }
+                            else
+                            {
+                                hasUpdate = !string.Equals(cleanTag, cleanCurrent, StringComparison.OrdinalIgnoreCase);
+                            }
+
+                            var outData = new
+                            {
+                                tag = tag,
+                                url = assetUrl,
+                                has_update = hasUpdate
+                            };
+
+                            return ApiResult.Ok("Success", JsonConvert.SerializeObject(outData));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return ApiResult.Fail("GitHub check error: " + ex.Message);
+            }
+
+            return ApiResult.Fail("No releases found.");
+        }
+
         private static async Task<ApiResult> CallRpcAsync(string functionName, object payload)
         {
             try
@@ -80,18 +335,18 @@ namespace ProjectOLDR
                 {
                     string body = await response.Content.ReadAsStringAsync();
                     if (response.IsSuccessStatusCode)
-                        return ApiResult.Ok();
+                        return ApiResult.Ok("Success", body);
 
                     return ApiResult.Fail(ParseError(body, (int)response.StatusCode));
                 }
             }
             catch (HttpRequestException)
             {
-                return ApiResult.Fail("Unable to contact the DB. Checks the Internet and project URL.");
+                return ApiResult.Fail("Connection failed. Check network.");
             }
             catch (Exception ex)
             {
-                return ApiResult.Fail("DB error : " + ex.Message);
+                return ApiResult.Fail("Database error: " + ex.Message);
             }
         }
 
@@ -104,19 +359,19 @@ namespace ProjectOLDR
                 string code = (string)error["code"];
 
                 if (!string.IsNullOrWhiteSpace(message) && message.StartsWith("RATE_LIMIT", StringComparison.OrdinalIgnoreCase))
-                    return "You have been rate limited - retry in 5 days.";
+                    return "Rate limited. Please retry later.";
 
                 if (!string.IsNullOrWhiteSpace(message))
                     return message;
 
                 if (!string.IsNullOrWhiteSpace(code))
-                    return "Erreur Supabase (" + code + ").";
+                    return "Supabase error (" + code + ").";
             }
             catch
             {
             }
 
-            return "Supabase Error (HTTP " + statusCode + ").";
+            return "Error (HTTP " + statusCode + ").";
         }
 
         private static string LoadClientId()
