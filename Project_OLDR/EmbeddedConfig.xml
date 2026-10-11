@@ -1,1 +1,9 @@
-<!-- Hided for public repo, because on it it's the DB, and the Server, and the admin password, so i am not sharing it sorry everyone, by the way all files is public, just not this.  -->
+<!-- Hided the DB and the Admin Password, and the Server.  -->
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+	<appSettings>
+		<add key="AdminPassword" value="Your_AdminPassword_Here" />
+		<add key="SupabaseUrl" value="Your_SupabaseUrl_Here" />
+		<add key="SupabaseKey" value="Your_SupabaseKey_here" />
+	</appSettings>
+</configuration>
