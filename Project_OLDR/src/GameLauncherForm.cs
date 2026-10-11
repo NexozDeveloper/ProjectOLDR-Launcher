@@ -12,10 +12,11 @@ namespace ProjectOLDR
 {
     public class GameLauncherForm : Form
     {
-        private const string CurrentLauncherVersion = "1.0";
+        private const string CurrentLauncherVersion = "2.0.0.0";
 
         private Label statusLabel;
         private Label dbStatusLabel;
+        private Label onlinePlayersLabel;
         private Label versionLabel;
         private Button playBtn;
         private Button friendsBtn;
@@ -100,6 +101,17 @@ namespace ProjectOLDR
                 AutoSize = true
             };
 
+            Panel playersBadge = MainUi.CreateContainer(250, 14, 195, 36);
+            onlinePlayersLabel = new Label
+            {
+                Text = "Players in launcher: ...",
+                Font = MainUi.Small,
+                ForeColor = MainUi.TextPrimary,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            playersBadge.Controls.Add(onlinePlayersLabel);
+
             friendsBtn = MainUi.CreateStyledButton("Friends", 460, 14, 110, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
             friendsBtn.Click += (s, e) =>
             {
@@ -113,6 +125,7 @@ namespace ProjectOLDR
             topBar.Controls.Add(avatar);
             topBar.Controls.Add(userLabel);
             topBar.Controls.Add(dbStatusLabel);
+            topBar.Controls.Add(playersBadge);
             topBar.Controls.Add(friendsBtn);
             topBar.Controls.Add(logoutBtn);
 
@@ -208,19 +221,19 @@ namespace ProjectOLDR
         private async Task InitializeDashboardAsync()
         {
             await SupabaseApi.UpdatePresenceAsync(currentUsername);
-            await RefreshDbHealthAsync();
+            await RefreshDashboardStatsAsync();
             CheckAndExtractGame();
 
             refreshTimer = new System.Windows.Forms.Timer { Interval = 15000 };
             refreshTimer.Tick += async (s, e) =>
             {
                 await SupabaseApi.UpdatePresenceAsync(currentUsername);
-                await RefreshDbHealthAsync();
+                await RefreshDashboardStatsAsync();
             };
             refreshTimer.Start();
         }
 
-        private async Task RefreshDbHealthAsync()
+        private async Task RefreshDashboardStatsAsync()
         {
             var res = await SupabaseApi.CheckDatabaseHealthAsync();
             if (res.Success)
@@ -233,6 +246,9 @@ namespace ProjectOLDR
                 dbStatusLabel.Text = "● " + res.Message;
                 dbStatusLabel.ForeColor = MainUi.Danger;
             }
+
+            int count = await SupabaseApi.GetOnlinePlayersCountAsync();
+            onlinePlayersLabel.Text = $"Number of players in launcher: {count}";
         }
 
         private async Task CheckGitHubUpdateAsync()
@@ -272,8 +288,8 @@ namespace ProjectOLDR
                     }
                     else
                     {
-                        MessageBox.Show($"Your client is already on the latest release (v{CurrentLauncherVersion}).", "Launcher Up to Date", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        statusLabel.Text = "Launcher is up to date.";
+                        MessageBox.Show("You are fully updated.", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        statusLabel.Text = "You are fully updated.";
                         statusLabel.ForeColor = MainUi.Accent;
                     }
                 }
