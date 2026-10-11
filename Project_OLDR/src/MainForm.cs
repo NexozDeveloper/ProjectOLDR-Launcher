@@ -1,6 +1,8 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ProjectOLDR.UI;
@@ -26,6 +28,7 @@ namespace ProjectOLDR
             dbHealthLabel = new Label();
 
             BuildUI();
+            LoadSavedCredentials();
 
             this.Shown += async (s, e) => await CheckDbStatusAsync();
         }
@@ -77,7 +80,7 @@ namespace ProjectOLDR
 
             dbHealthLabel = new Label
             {
-                Text = "● Checking Supabase...",
+                Text = "● Checking Network...",
                 Font = MainUi.Small,
                 ForeColor = MainUi.Warning,
                 Location = new Point(20, 75),
@@ -110,7 +113,7 @@ namespace ProjectOLDR
             loginBtn = MainUi.CreateStyledButton("Sign In", 25, 250, 300, 42, MainUi.Accent, MainUi.AccentHover);
             loginBtn.Click += LoginBtn_Click;
 
-            registerBtn = MainUi.CreateStyledButton("Create Account", 25, 300, 300, 38, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            registerBtn = MainUi.CreateStyledButton("Sign Up", 25, 300, 300, 38, MainUi.SurfaceHighlight, MainUi.BorderColor);
             registerBtn.Click += RegisterBtn_Click;
 
             statusLabel = new Label
@@ -137,6 +140,50 @@ namespace ProjectOLDR
             this.Controls.Add(card);
 
             this.KeyDown += MainForm_KeyDown;
+        }
+
+        private string GetCredentialsPath()
+        {
+            string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Nexoz");
+            Directory.CreateDirectory(folder);
+            return Path.Combine(folder, "credentials.dat");
+        }
+
+        private void SaveCredentials(string username, string password)
+        {
+            try
+            {
+                string raw = username + "||" + password;
+                byte[] bytes = Encoding.UTF8.GetBytes(raw);
+                string b64 = Convert.ToBase64String(bytes);
+                File.WriteAllText(GetCredentialsPath(), b64);
+            }
+            catch
+            {
+            }
+        }
+
+        private void LoadSavedCredentials()
+        {
+            try
+            {
+                string path = GetCredentialsPath();
+                if (File.Exists(path))
+                {
+                    string b64 = File.ReadAllText(path).Trim();
+                    byte[] bytes = Convert.FromBase64String(b64);
+                    string raw = Encoding.UTF8.GetString(bytes);
+                    string[] parts = raw.Split(new[] { "||" }, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                    {
+                        usernameBox.Text = parts[0];
+                        passwordBox.Text = parts[1];
+                    }
+                }
+            }
+            catch
+            {
+            }
         }
 
         private async Task CheckDbStatusAsync()
@@ -172,6 +219,7 @@ namespace ProjectOLDR
             ApiResult result = await SupabaseApi.RegisterAsync(username, password);
             if (result.Success)
             {
+                SaveCredentials(username, password);
                 statusLabel.Text = "Account registered! You can now sign in.";
                 statusLabel.ForeColor = MainUi.Accent;
             }
@@ -200,13 +248,18 @@ namespace ProjectOLDR
             ApiResult result = await SupabaseApi.LoginAsync(username, password);
             if (result.Success)
             {
+                SaveCredentials(username, password);
                 statusLabel.Text = "Access granted.";
                 statusLabel.ForeColor = MainUi.Accent;
 
                 this.Hide();
-                GameLauncherForm launcher = new GameLauncherForm(username);
-                launcher.ShowDialog();
-                this.Close();
+                using (GameLauncherForm launcher = new GameLauncherForm(username))
+                {
+                    launcher.ShowDialog();
+                }
+
+                LoadSavedCredentials();
+                this.Show();
             }
             else
             {
