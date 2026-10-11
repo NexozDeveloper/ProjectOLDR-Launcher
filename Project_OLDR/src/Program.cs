@@ -39,7 +39,7 @@ namespace ProjectOLDR
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Erreur lors de l'installation automatique : " + ex.Message,
+                    MessageBox.Show("Error during automatic installation : " + ex.Message,
                                     "Project OLDR",
                                     MessageBoxButtons.OK,
                                     MessageBoxIcon.Error);
