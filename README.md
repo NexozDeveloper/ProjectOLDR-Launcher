@@ -38,4 +38,6 @@ License
 
 This software is released under the terms specified in the LICENSE file. Review the license before redistribution, branching, or commercial application.
 
-bin\Release\net10.0-windows\win-x64\publish\ProjectOLDR.exe 
+bin\Release\net10.0-windows\win-x64\publish\ProjectOLDR.exe
+
+End
