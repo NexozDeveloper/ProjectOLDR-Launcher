@@ -16,6 +16,7 @@ namespace ProjectOLDR
         private TextBox addFriendBox;
         private Button addFriendBtn;
         private Button acceptBtn;
+        private Button declineBtn;
         private Label statusLabel;
         private System.Windows.Forms.Timer loopTimer;
 
@@ -91,15 +92,18 @@ namespace ProjectOLDR
             requestsListBox = new ListBox
             {
                 Location = new Point(16, 276),
-                Size = new Size(244, 76),
+                Size = new Size(180, 76),
                 BackColor = MainUi.SurfaceHighlight,
                 ForeColor = MainUi.TextPrimary,
                 BorderStyle = BorderStyle.None,
                 Font = MainUi.Regular
             };
 
-            acceptBtn = MainUi.CreateStyledButton("Accept", 268, 276, 96, 76, MainUi.Accent, MainUi.AccentHover);
+            acceptBtn = MainUi.CreateStyledButton("Accept", 204, 276, 76, 76, MainUi.Accent, MainUi.AccentHover);
             acceptBtn.Click += async (s, e) => await AcceptSelectedRequestAsync();
+
+            declineBtn = MainUi.CreateStyledButton("Decline", 286, 276, 76, 76, Color.FromArgb(40, 22, 28), MainUi.Danger);
+            declineBtn.Click += async (s, e) => await DeclineSelectedRequestAsync();
 
             Label addTitle = new Label
             {
@@ -129,6 +133,7 @@ namespace ProjectOLDR
             card.Controls.Add(reqTitle);
             card.Controls.Add(requestsListBox);
             card.Controls.Add(acceptBtn);
+            card.Controls.Add(declineBtn);
             card.Controls.Add(addTitle);
             card.Controls.Add(addFriendBox);
             card.Controls.Add(addFriendBtn);
@@ -244,6 +249,34 @@ namespace ProjectOLDR
             }
 
             acceptBtn.Enabled = true;
+        }
+
+        private async Task DeclineSelectedRequestAsync()
+        {
+            if (requestsListBox.SelectedIndex < 0)
+            {
+                statusLabel.Text = "Select a pending request first.";
+                statusLabel.ForeColor = MainUi.Warning;
+                return;
+            }
+
+            string target = requestsListBox.SelectedItem.ToString();
+            declineBtn.Enabled = false;
+
+            var res = await SupabaseApi.DeclineFriendAsync(currentUsername, target);
+            if (res.Success)
+            {
+                statusLabel.Text = $"Declined friend request from {target}.";
+                statusLabel.ForeColor = MainUi.TextMuted;
+                await RefreshAllAsync();
+            }
+            else
+            {
+                statusLabel.Text = res.Message;
+                statusLabel.ForeColor = MainUi.Danger;
+            }
+
+            declineBtn.Enabled = true;
         }
 
         private async Task AddFriendClickAsync()
