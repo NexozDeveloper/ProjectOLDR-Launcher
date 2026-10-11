@@ -44,38 +44,6 @@ namespace ProjectOLDR.UI
                 g.FillEllipse(brush, r.Right - 7, r.Y + r.Height / 2 - 2, 3, 3);
             }
         }
-
-        public static void DrawPlay(Graphics g, Rectangle r, Color color)
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (SolidBrush brush = new SolidBrush(color))
-            {
-                Point[] pts = new Point[]
-                {
-                    new Point(r.X + 2, r.Y),
-                    new Point(r.Right - 1, r.Y + r.Height / 2),
-                    new Point(r.X + 2, r.Bottom)
-                };
-                g.FillPolygon(brush, pts);
-            }
-        }
-
-        public static void DrawRefresh(Graphics g, Rectangle r, Color color)
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (Pen pen = new Pen(color, 2f))
-            {
-                g.DrawArc(pen, r.X + 2, r.Y + 2, r.Width - 4, r.Height - 4, 45, 270);
-                Point[] arrow = new Point[]
-                {
-                    new Point(r.Right - 1, r.Y + 1),
-                    new Point(r.Right - 5, r.Y + 6),
-                    new Point(r.Right - 6, r.Y + 1)
-                };
-                using (SolidBrush b = new SolidBrush(color))
-                    g.FillPolygon(b, arrow);
-            }
-        }
     }
 
     public static class MainUi
@@ -168,7 +136,7 @@ namespace ProjectOLDR.UI
             closeBtn.FlatAppearance.BorderSize = 0;
             closeBtn.MouseEnter += (s, e) => { closeBtn.BackColor = Danger; closeBtn.ForeColor = TextPrimary; };
             closeBtn.MouseLeave += (s, e) => { closeBtn.BackColor = Color.Transparent; closeBtn.ForeColor = TextSecondary; };
-            closeBtn.Click += (s, e) => parent.Close();
+            closeBtn.Click += (s, e) => Application.Exit();
             bar.Controls.Add(closeBtn);
 
             Button minBtn = new Button
