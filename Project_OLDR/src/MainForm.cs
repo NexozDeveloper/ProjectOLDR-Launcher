@@ -1,7 +1,9 @@
 using System;
 using System.Drawing;
-using System.IO;
+using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using ProjectOLDR.UI;
 
 namespace ProjectOLDR
 {
@@ -12,101 +14,144 @@ namespace ProjectOLDR
         private Button loginBtn;
         private Button registerBtn;
         private Label statusLabel;
+        private Label dbHealthLabel;
 
         public MainForm()
         {
-
             usernameBox = new TextBox();
             passwordBox = new TextBox();
             loginBtn = new Button();
             registerBtn = new Button();
             statusLabel = new Label();
+            dbHealthLabel = new Label();
+
             BuildUI();
+
+            this.Shown += async (s, e) => await CheckDbStatusAsync();
         }
 
         private void BuildUI()
         {
-            this.Text = "Project OLDR - Login";
-            this.Size = new Size(400, 400);
-            this.BackColor = Color.Black;
-            this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
+            this.Text = "Project OLDR";
+            this.Size = new Size(420, 520);
+            this.BackColor = MainUi.BgColor;
+            this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.Icon = null;
+            this.KeyPreview = true;
 
-            Label title = new Label();
-            title.Text = "ProjectOLDR Launcher\nLogin Page";
-            title.ForeColor = Color.White;
-            title.Font = new Font("Segoe UI", 16, FontStyle.Bold);
-            title.Size = new Size(380, 80);
-            title.Location = new Point(10, 10);
-            title.TextAlign = ContentAlignment.MiddleCenter;
+            this.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
+                using (GraphicsPath path = MainUi.GetRoundedPath(rect, 8))
+                using (Pen pen = new Pen(MainUi.BorderColor, 1.2f))
+                {
+                    this.Region = new Region(path);
+                    e.Graphics.DrawPath(pen, path);
+                }
+            };
 
-            Label userLabel = new Label();
-            userLabel.Text = "Username:";
-            userLabel.ForeColor = Color.White;
-            userLabel.Font = new Font("Segoe UI", 10);
-            userLabel.Size = new Size(100, 25);
-            userLabel.Location = new Point(50, 110);
+            this.Controls.Add(MainUi.CreateTitleBar(this, "Project OLDR Launcher"));
 
-            usernameBox.Location = new Point(150, 110);
-            usernameBox.Size = new Size(200, 25);
-            usernameBox.BackColor = Color.FromArgb(30, 30, 30);
-            usernameBox.ForeColor = Color.White;
-            usernameBox.BorderStyle = BorderStyle.FixedSingle;
+            Panel card = MainUi.CreateContainer(35, 55, 350, 430);
 
-            Label passLabel = new Label();
-            passLabel.Text = "Password:";
-            passLabel.ForeColor = Color.White;
-            passLabel.Font = new Font("Segoe UI", 10);
-            passLabel.Size = new Size(100, 25);
-            passLabel.Location = new Point(50, 150);
+            Label title = new Label
+            {
+                Text = "Welcome Back",
+                Font = MainUi.HeaderLarge,
+                ForeColor = MainUi.TextPrimary,
+                Location = new Point(20, 20),
+                Size = new Size(310, 30),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
 
-            passwordBox.Location = new Point(150, 150);
-            passwordBox.Size = new Size(200, 25);
-            passwordBox.BackColor = Color.FromArgb(30, 30, 30);
-            passwordBox.ForeColor = Color.White;
-            passwordBox.BorderStyle = BorderStyle.FixedSingle;
-            passwordBox.PasswordChar = '*';
+            Label subtitle = new Label
+            {
+                Text = "Sign in to Secret Neighbor Edition",
+                Font = MainUi.Small,
+                ForeColor = MainUi.TextMuted,
+                Location = new Point(20, 50),
+                Size = new Size(310, 20),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
 
-            loginBtn.Text = "LOG IN";
-            loginBtn.ForeColor = Color.White;
-            loginBtn.BackColor = Color.FromArgb(0, 150, 0);
-            loginBtn.Font = new Font("Segoe UI", 12, FontStyle.Bold);
-            loginBtn.Size = new Size(100, 40);
-            loginBtn.Location = new Point(90, 200);
-            loginBtn.FlatStyle = FlatStyle.Flat;
-            loginBtn.FlatAppearance.BorderSize = 0;
+            dbHealthLabel = new Label
+            {
+                Text = "● Checking Supabase...",
+                Font = MainUi.Small,
+                ForeColor = MainUi.Warning,
+                Location = new Point(20, 75),
+                Size = new Size(310, 20),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            Label userTag = new Label
+            {
+                Text = "USERNAME",
+                Font = MainUi.Small,
+                ForeColor = MainUi.TextSecondary,
+                Location = new Point(25, 110),
+                Size = new Size(300, 16)
+            };
+
+            usernameBox = MainUi.CreateStyledTextBox(25, 130, 300, 30);
+
+            Label passTag = new Label
+            {
+                Text = "PASSWORD",
+                Font = MainUi.Small,
+                ForeColor = MainUi.TextSecondary,
+                Location = new Point(25, 175),
+                Size = new Size(300, 16)
+            };
+
+            passwordBox = MainUi.CreateStyledTextBox(25, 195, 300, 30, true);
+
+            loginBtn = MainUi.CreateStyledButton("Sign In", 25, 250, 300, 42, MainUi.Accent, MainUi.AccentHover);
             loginBtn.Click += LoginBtn_Click;
 
-            registerBtn.Text = "SIGN UP";
-            registerBtn.ForeColor = Color.White;
-            registerBtn.BackColor = Color.FromArgb(60, 60, 60);
-            registerBtn.Font = new Font("Segoe UI", 12, FontStyle.Bold);
-            registerBtn.Size = new Size(100, 40);
-            registerBtn.Location = new Point(210, 200);
-            registerBtn.FlatStyle = FlatStyle.Flat;
-            registerBtn.FlatAppearance.BorderSize = 0;
+            registerBtn = MainUi.CreateStyledButton("Create Account", 25, 300, 300, 38, MainUi.SurfaceHighlight, MainUi.BorderColor);
             registerBtn.Click += RegisterBtn_Click;
 
-            statusLabel.Text = "Enter your credentials";
-            statusLabel.ForeColor = Color.Gray;
-            statusLabel.Font = new Font("Segoe UI", 10);
-            statusLabel.Size = new Size(380, 25);
-            statusLabel.Location = new Point(10, 270);
-            statusLabel.TextAlign = ContentAlignment.MiddleCenter;
+            statusLabel = new Label
+            {
+                Text = "Ready to connect",
+                Font = MainUi.Small,
+                ForeColor = MainUi.TextMuted,
+                Location = new Point(25, 355),
+                Size = new Size(300, 45),
+                TextAlign = ContentAlignment.TopCenter
+            };
 
-            this.Controls.Add(title);
-            this.Controls.Add(userLabel);
-            this.Controls.Add(usernameBox);
-            this.Controls.Add(passLabel);
-            this.Controls.Add(passwordBox);
-            this.Controls.Add(loginBtn);
-            this.Controls.Add(registerBtn);
-            this.Controls.Add(statusLabel);
+            card.Controls.Add(title);
+            card.Controls.Add(subtitle);
+            card.Controls.Add(dbHealthLabel);
+            card.Controls.Add(userTag);
+            card.Controls.Add(usernameBox);
+            card.Controls.Add(passTag);
+            card.Controls.Add(passwordBox);
+            card.Controls.Add(loginBtn);
+            card.Controls.Add(registerBtn);
+            card.Controls.Add(statusLabel);
+
+            this.Controls.Add(card);
 
             this.KeyDown += MainForm_KeyDown;
-            this.KeyPreview = true;
+        }
+
+        private async Task CheckDbStatusAsync()
+        {
+            var result = await SupabaseApi.CheckDatabaseHealthAsync();
+            if (result.Success)
+            {
+                dbHealthLabel.Text = "● " + result.Message;
+                dbHealthLabel.ForeColor = MainUi.Accent;
+            }
+            else
+            {
+                dbHealthLabel.Text = "● " + result.Message;
+                dbHealthLabel.ForeColor = MainUi.Danger;
+            }
         }
 
         private async void RegisterBtn_Click(object sender, EventArgs e)
@@ -116,29 +161,24 @@ namespace ProjectOLDR
 
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
             {
-                statusLabel.Text = "Please fill all fields!";
-                statusLabel.ForeColor = Color.Orange;
+                statusLabel.Text = "Please complete all fields.";
+                statusLabel.ForeColor = MainUi.Danger;
                 return;
             }
 
-            statusLabel.Text = "Creating account...";
-            statusLabel.ForeColor = Color.Yellow;
+            statusLabel.Text = "Creating user account...";
+            statusLabel.ForeColor = MainUi.Warning;
 
             ApiResult result = await SupabaseApi.RegisterAsync(username, password);
             if (result.Success)
             {
-                statusLabel.Text = "Account created! You can log in.";
-                statusLabel.ForeColor = Color.LightGreen;
-                MessageBox.Show(
-                    "Account created successfully!\n\nUsername: " + username + "\nPassword: " + password,
-                    "Account details",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                statusLabel.Text = "Account registered! You can now sign in.";
+                statusLabel.ForeColor = MainUi.Accent;
             }
             else
             {
                 statusLabel.Text = result.Message;
-                statusLabel.ForeColor = Color.Red;
+                statusLabel.ForeColor = MainUi.Danger;
             }
         }
 
@@ -149,19 +189,20 @@ namespace ProjectOLDR
 
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
             {
-                statusLabel.Text = "Please fill all fields!";
-                statusLabel.ForeColor = Color.Orange;
+                statusLabel.Text = "Please complete all fields.";
+                statusLabel.ForeColor = MainUi.Danger;
                 return;
             }
 
-            statusLabel.Text = "Connecting...";
-            statusLabel.ForeColor = Color.Yellow;
+            statusLabel.Text = "Authenticating profile...";
+            statusLabel.ForeColor = MainUi.Warning;
 
             ApiResult result = await SupabaseApi.LoginAsync(username, password);
             if (result.Success)
             {
-                statusLabel.Text = "Login successful!";
-                statusLabel.ForeColor = Color.LightGreen;
+                statusLabel.Text = "Access granted.";
+                statusLabel.ForeColor = MainUi.Accent;
+
                 this.Hide();
                 GameLauncherForm launcher = new GameLauncherForm(username);
                 launcher.ShowDialog();
@@ -170,7 +211,7 @@ namespace ProjectOLDR
             else
             {
                 statusLabel.Text = result.Message;
-                statusLabel.ForeColor = Color.Red;
+                statusLabel.ForeColor = MainUi.Danger;
             }
         }
 
