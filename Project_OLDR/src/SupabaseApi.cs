@@ -120,7 +120,7 @@ namespace ProjectOLDR
                 var payload = new
                 {
                     username = username.Trim(),
-                    last_seen = DateTime.UtcNow.ToString("o")
+                    last_seen = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
                 };
 
                 string json = JsonConvert.SerializeObject(payload);
@@ -139,19 +139,32 @@ namespace ProjectOLDR
             }
         }
 
+        public static async Task RemovePresenceAsync(string username)
+        {
+            try
+            {
+                string url = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(username.Trim())}";
+                await Client.DeleteAsync(url);
+            }
+            catch
+            {
+            }
+        }
+
         public static async Task<int> GetOnlinePlayersCountAsync()
         {
             try
             {
-                string threshold = DateTime.UtcNow.AddSeconds(-35).ToString("o");
+                string threshold = DateTime.UtcNow.AddSeconds(-8).ToString("yyyy-MM-ddTHH:mm:ssZ");
                 string url = $"rest/v1/user_presence?last_seen=gte.{Uri.EscapeDataString(threshold)}";
+
                 using (var response = await Client.GetAsync(url))
                 {
                     if (response.IsSuccessStatusCode)
                     {
                         string body = await response.Content.ReadAsStringAsync();
                         JArray arr = JArray.Parse(body);
-                        return arr.Count;
+                        return Math.Max(1, arr.Count);
                     }
                 }
             }
@@ -165,18 +178,15 @@ namespace ProjectOLDR
         {
             try
             {
-                string url = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(username)}";
+                string threshold = DateTime.UtcNow.AddSeconds(-8).ToString("yyyy-MM-ddTHH:mm:ssZ");
+                string url = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(username)}&last_seen=gte.{Uri.EscapeDataString(threshold)}";
                 using (var response = await Client.GetAsync(url))
                 {
                     if (response.IsSuccessStatusCode)
                     {
                         string body = await response.Content.ReadAsStringAsync();
                         JArray arr = JArray.Parse(body);
-                        if (arr.Count > 0)
-                        {
-                            DateTime lastSeen = (DateTime)arr[0]["last_seen"];
-                            return (DateTime.UtcNow - lastSeen.ToUniversalTime()).TotalSeconds < 35;
-                        }
+                        return arr.Count > 0;
                     }
                 }
             }
