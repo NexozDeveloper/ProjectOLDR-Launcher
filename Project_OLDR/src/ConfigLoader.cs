@@ -40,7 +40,7 @@ namespace ProjectOLDR
 
                 try
                 {
-                    string secretKey = "Hideforpublicrepo"; // Empty for public repo i will don't say the password of the real app sorry yall
+                    string secretKey = "Hideforpublicrepo"; 
 
                     string decryptedXml;
                     if (rawContent.StartsWith("<?xml"))
