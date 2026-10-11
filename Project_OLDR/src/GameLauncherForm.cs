@@ -1,145 +1,201 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using Newtonsoft.Json.Linq;
+using ProjectOLDR.UI;
 
 namespace ProjectOLDR
 {
     public class GameLauncherForm : Form
     {
+        private const string CurrentLauncherVersion = "1.0";
+
         private Label statusLabel;
+        private Label dbStatusLabel;
+        private Label versionLabel;
         private Button playBtn;
+        private Button friendsBtn;
+        private Button updateBtn;
         private Button logoutBtn;
         private ProgressBar progressBar;
         private Label progressLabel;
-        private string gamePath;
-        private string appDataPath;
-        private string documentsPath;
-        private string rarPath;
+
+        private string gamePath = "";
+        private string appDataPath = "";
+        private string documentsPath = "";
+        private string rarPath = "";
         private string currentUsername;
+        private System.Windows.Forms.Timer refreshTimer;
 
         public GameLauncherForm(string username)
         {
-            statusLabel = new Label();
-            playBtn = new Button();
-            logoutBtn = new Button();
-            progressBar = new ProgressBar();
-            progressLabel = new Label();
-            gamePath = "";
-            appDataPath = "";
-            documentsPath = "";
-            rarPath = "";
             currentUsername = username;
-
             BuildUI();
-            CheckAndExtractGame();
+            InitializePaths();
+
+            this.Shown += async (s, e) => await InitializeDashboardAsync();
         }
 
         private void BuildUI()
         {
             this.Text = "Project OLDR";
-            this.Size = new Size(500, 420);
-            this.BackColor = Color.Black;
-            this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
+            this.Size = new Size(740, 480);
+            this.BackColor = MainUi.BgColor;
+            this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.Icon = null;
-            this.FormClosed += GameLauncherForm_FormClosed;
-
-            Label title = new Label();
-            title.Text = "ProjectOLDR Launcher\n Secret Neigbor";
-            title.ForeColor = Color.White;
-            title.Font = new Font("Segoe UI", 18, FontStyle.Bold);
-            title.Size = new Size(480, 80);
-            title.Location = new Point(10, 10);
-            title.TextAlign = ContentAlignment.MiddleCenter;
-
-            Label usernameDisplay = new Label();
-            usernameDisplay.Text = $"Logged as: {currentUsername}";
-            usernameDisplay.ForeColor = Color.Gray;
-            usernameDisplay.Font = new Font("Segoe UI", 9);
-            usernameDisplay.Size = new Size(200, 20);
-            usernameDisplay.Location = new Point(10, 85);
-            usernameDisplay.TextAlign = ContentAlignment.MiddleLeft;
-
-            logoutBtn.Text = "Logout";
-            logoutBtn.ForeColor = Color.White;
-            logoutBtn.BackColor = Color.FromArgb(60, 60, 60);
-            logoutBtn.Font = new Font("Segoe UI", 9);
-            logoutBtn.Size = new Size(80, 25);
-            logoutBtn.Location = new Point(400, 82);
-            logoutBtn.FlatStyle = FlatStyle.Flat;
-            logoutBtn.FlatAppearance.BorderSize = 0;
-            logoutBtn.Cursor = Cursors.Hand;
-            logoutBtn.Click += LogoutBtn_Click;
-
-            progressBar.Size = new Size(400, 30);
-            progressBar.Location = new Point(40, 130);
-            progressBar.Minimum = 0;
-            progressBar.Maximum = 100;
-            progressBar.Value = 0;
-            progressBar.Style = ProgressBarStyle.Continuous;
-            progressBar.Visible = false;
-
-            progressLabel.Text = "";
-            progressLabel.ForeColor = Color.White;
-            progressLabel.Font = new Font("Segoe UI", 10);
-            progressLabel.Size = new Size(400, 25);
-            progressLabel.Location = new Point(40, 165);
-            progressLabel.TextAlign = ContentAlignment.MiddleCenter;
-            progressLabel.Visible = false;
-
-            playBtn.Text = "▶ PLAY";
-            playBtn.ForeColor = Color.White;
-            playBtn.BackColor = Color.FromArgb(0, 150, 0);
-            playBtn.Font = new Font("Segoe UI", 16, FontStyle.Bold);
-            playBtn.Size = new Size(180, 60);
-            playBtn.Location = new Point(150, 210);
-            playBtn.FlatStyle = FlatStyle.Flat;
-            playBtn.FlatAppearance.BorderSize = 0;
-            playBtn.Enabled = false;
-            playBtn.Click += PlayBtn_Click;
-
-            statusLabel.Text = "Status: Initializing...";
-            statusLabel.ForeColor = Color.Gray;
-            statusLabel.Font = new Font("Segoe UI", 10);
-            statusLabel.Size = new Size(480, 25);
-            statusLabel.Location = new Point(10, 320);
-            statusLabel.TextAlign = ContentAlignment.MiddleCenter;
-
-            this.Controls.Add(title);
-            this.Controls.Add(usernameDisplay);
-            this.Controls.Add(logoutBtn);
-            this.Controls.Add(progressBar);
-            this.Controls.Add(progressLabel);
-            this.Controls.Add(playBtn);
-            this.Controls.Add(statusLabel);
-
-            this.KeyDown += GameLauncherForm_KeyDown;
             this.KeyPreview = true;
-        }
+            this.FormClosed += (s, e) => Application.Exit();
 
-        private void GameLauncherForm_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.F2)
+            this.Paint += (s, e) =>
             {
-                AdminForm admin = new AdminForm(); 
-                admin.ShowDialog();
-            }
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
+                using (GraphicsPath path = MainUi.GetRoundedPath(rect, 8))
+                using (Pen pen = new Pen(MainUi.BorderColor, 1.2f))
+                {
+                    this.Region = new Region(path);
+                    e.Graphics.DrawPath(pen, path);
+                }
+            };
+
+            this.Controls.Add(MainUi.CreateTitleBar(this, "Project OLDR - Game Client"));
+
+            Panel topBar = MainUi.CreateContainer(20, 56, 700, 64);
+
+            Panel avatar = new Panel
+            {
+                Location = new Point(16, 12),
+                Size = new Size(40, 40),
+                BackColor = MainUi.SurfaceHighlight
+            };
+            avatar.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath p = MainUi.GetRoundedPath(new Rectangle(0, 0, 39, 39), 20))
+                {
+                    avatar.Region = new Region(p);
+                }
+                IconRenderer.DrawUser(e.Graphics, new Rectangle(11, 10, 18, 20), MainUi.Accent);
+            };
+
+            Label userLabel = new Label
+            {
+                Text = currentUsername,
+                Font = MainUi.HeaderMedium,
+                ForeColor = MainUi.TextPrimary,
+                Location = new Point(66, 12),
+                AutoSize = true
+            };
+
+            dbStatusLabel = new Label
+            {
+                Text = "● Checking Network...",
+                Font = MainUi.Small,
+                ForeColor = MainUi.Warning,
+                Location = new Point(67, 36),
+                AutoSize = true
+            };
+
+            friendsBtn = MainUi.CreateStyledButton("Friends", 460, 14, 110, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            friendsBtn.Click += (s, e) =>
+            {
+                using (var f = new FriendsForm(currentUsername))
+                    f.ShowDialog(this);
+            };
+
+            logoutBtn = MainUi.CreateStyledButton("Sign Out", 580, 14, 104, 36, Color.FromArgb(40, 20, 25), MainUi.Danger);
+            logoutBtn.Click += (s, e) => this.Close();
+
+            topBar.Controls.Add(avatar);
+            topBar.Controls.Add(userLabel);
+            topBar.Controls.Add(dbStatusLabel);
+            topBar.Controls.Add(friendsBtn);
+            topBar.Controls.Add(logoutBtn);
+
+            Panel heroCard = MainUi.CreateContainer(20, 132, 700, 326);
+
+            Label gameTitle = new Label
+            {
+                Text = "SECRET NEIGHBOR",
+                Font = new Font("Segoe UI", 22, FontStyle.Bold),
+                ForeColor = MainUi.TextPrimary,
+                Location = new Point(28, 24),
+                AutoSize = true
+            };
+
+            Label gameInfo = new Label
+            {
+                Text = "Direct Network Play • Build 2020",
+                Font = MainUi.Regular,
+                ForeColor = MainUi.TextSecondary,
+                Location = new Point(30, 64),
+                AutoSize = true
+            };
+
+            progressBar = new ProgressBar
+            {
+                Location = new Point(30, 125),
+                Size = new Size(640, 14),
+                Style = ProgressBarStyle.Continuous,
+                Visible = false
+            };
+
+            progressLabel = new Label
+            {
+                Text = "",
+                Font = MainUi.Small,
+                ForeColor = MainUi.TextMuted,
+                Location = new Point(30, 145),
+                Size = new Size(640, 18),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Visible = false
+            };
+
+            playBtn = MainUi.CreateStyledButton("PLAY GAME", 30, 195, 200, 52, MainUi.Accent, MainUi.AccentHover);
+            playBtn.Font = new Font("Segoe UI", 12, FontStyle.Bold);
+            playBtn.Enabled = false;
+            playBtn.Click += (s, e) => LaunchGame();
+
+            updateBtn = MainUi.CreateStyledButton("Check Updates", 244, 201, 160, 42, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            updateBtn.Click += async (s, e) => await CheckGitHubUpdateAsync();
+
+            statusLabel = new Label
+            {
+                Text = "Checking local files...",
+                Font = MainUi.Regular,
+                ForeColor = MainUi.TextMuted,
+                Location = new Point(30, 275),
+                Size = new Size(480, 25)
+            };
+
+            versionLabel = new Label
+            {
+                Text = $"v{CurrentLauncherVersion}",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = MainUi.TextMuted,
+                Location = new Point(570, 278),
+                Size = new Size(100, 20),
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            heroCard.Controls.Add(gameTitle);
+            heroCard.Controls.Add(gameInfo);
+            heroCard.Controls.Add(progressBar);
+            heroCard.Controls.Add(progressLabel);
+            heroCard.Controls.Add(playBtn);
+            heroCard.Controls.Add(updateBtn);
+            heroCard.Controls.Add(statusLabel);
+            heroCard.Controls.Add(versionLabel);
+
+            this.Controls.Add(topBar);
+            this.Controls.Add(heroCard);
         }
 
-        private void GameLauncherForm_FormClosed(object sender, FormClosedEventArgs e)
-        {
-            Application.Exit();
-        }
-
-        private void LogoutBtn_Click(object sender, EventArgs e)
-        {
-            this.Close();
-        }
-
-        private void CheckAndExtractGame()
+        private void InitializePaths()
         {
             appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProjectOLDR");
             documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -147,22 +203,113 @@ namespace ProjectOLDR
             rarPath = Path.Combine(documentsPath, "game.rar");
 
             Directory.CreateDirectory(appDataPath);
+        }
 
+        private async Task InitializeDashboardAsync()
+        {
+            await SupabaseApi.UpdatePresenceAsync(currentUsername);
+            await RefreshDbHealthAsync();
+            CheckAndExtractGame();
+
+            refreshTimer = new System.Windows.Forms.Timer { Interval = 15000 };
+            refreshTimer.Tick += async (s, e) =>
+            {
+                await SupabaseApi.UpdatePresenceAsync(currentUsername);
+                await RefreshDbHealthAsync();
+            };
+            refreshTimer.Start();
+        }
+
+        private async Task RefreshDbHealthAsync()
+        {
+            var res = await SupabaseApi.CheckDatabaseHealthAsync();
+            if (res.Success)
+            {
+                dbStatusLabel.Text = "● " + res.Message;
+                dbStatusLabel.ForeColor = MainUi.Accent;
+            }
+            else
+            {
+                dbStatusLabel.Text = "● " + res.Message;
+                dbStatusLabel.ForeColor = MainUi.Danger;
+            }
+        }
+
+        private async Task CheckGitHubUpdateAsync()
+        {
+            updateBtn.Enabled = false;
+            statusLabel.Text = "Checking GitHub releases...";
+            statusLabel.ForeColor = MainUi.TextMuted;
+
+            var res = await SupabaseApi.CheckGitHubUpdateAsync(CurrentLauncherVersion);
+            if (res.Success)
+            {
+                try
+                {
+                    JObject obj = JObject.Parse(res.Data);
+                    bool hasUpdate = (bool)obj["has_update"];
+                    string tag = (string)obj["tag"];
+                    string downloadUrl = (string)obj["url"];
+
+                    if (hasUpdate)
+                    {
+                        var confirm = MessageBox.Show(
+                            $"A new launcher version is available: {tag} (Current: v{CurrentLauncherVersion})\n\nOpen download page?",
+                            "Update Available",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Information);
+
+                        if (confirm == DialogResult.Yes && !string.IsNullOrEmpty(downloadUrl))
+                        {
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = downloadUrl,
+                                UseShellExecute = true
+                            });
+                        }
+                        statusLabel.Text = $"Update detected: {tag}";
+                        statusLabel.ForeColor = MainUi.Warning;
+                    }
+                    else
+                    {
+                        MessageBox.Show($"Your client is already on the latest release (v{CurrentLauncherVersion}).", "Launcher Up to Date", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        statusLabel.Text = "Launcher is up to date.";
+                        statusLabel.ForeColor = MainUi.Accent;
+                    }
+                }
+                catch
+                {
+                    statusLabel.Text = "Failed to parse update manifest.";
+                    statusLabel.ForeColor = MainUi.Danger;
+                }
+            }
+            else
+            {
+                MessageBox.Show(res.Message, "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                statusLabel.Text = "Could not check for updates.";
+                statusLabel.ForeColor = MainUi.Danger;
+            }
+
+            updateBtn.Enabled = true;
+        }
+
+        private void CheckAndExtractGame()
+        {
             if (File.Exists(gamePath))
             {
-                statusLabel.Text = "Status: Game ready!";
-                statusLabel.ForeColor = Color.LightGreen;
+                statusLabel.Text = "Binaries ready to launch.";
+                statusLabel.ForeColor = MainUi.Accent;
                 playBtn.Enabled = true;
                 return;
             }
 
             if (!File.Exists(rarPath))
             {
-                statusLabel.Text = "Status: game.rar not found in Documents!";
-                statusLabel.ForeColor = Color.Red;
+                statusLabel.Text = "Place game.rar in your Documents folder.";
+                statusLabel.ForeColor = MainUi.Danger;
                 MessageBox.Show(
-                    "game.rar not found!\n\nExpected location:\n" + rarPath + "\n\nPlease place the game.rar file in your Documents folder.",
-                    "Project OLDR - Error",
+                    "Place game.rar inside your Documents folder:\n" + rarPath,
+                    "Archive Missing",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
                 return;
@@ -175,112 +322,108 @@ namespace ProjectOLDR
         {
             try
             {
-                statusLabel.Text = "Status: Extracting game files...";
-                statusLabel.ForeColor = Color.Yellow;
+                statusLabel.Text = "Extracting client files...";
+                statusLabel.ForeColor = MainUi.Warning;
                 playBtn.Enabled = false;
 
                 progressBar.Visible = true;
                 progressLabel.Visible = true;
                 progressBar.Value = 0;
-                progressLabel.Text = "Extracting... 0%";
+                progressLabel.Text = "0%";
 
-                ExtractRarWithProgress(rarPath, appDataPath);
+                ExtractArchive(rarPath, appDataPath);
 
                 if (File.Exists(gamePath))
                 {
-                    statusLabel.Text = "Status: Extraction complete!";
-                    statusLabel.ForeColor = Color.LightGreen;
+                    statusLabel.Text = "Extraction finished.";
+                    statusLabel.ForeColor = MainUi.Accent;
                     playBtn.Enabled = true;
-                    progressLabel.Text = "Extraction complete! 100%";
+                    progressLabel.Text = "100%";
 
                     try { File.Delete(rarPath); } catch { }
 
-                    System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
-                    timer.Interval = 1000;
-                    timer.Tick += (s, e) =>
+                    var t = new System.Windows.Forms.Timer { Interval = 1000 };
+                    t.Tick += (s, e) =>
                     {
-                        timer.Stop();
+                        t.Stop();
                         LaunchGame();
                     };
-                    timer.Start();
+                    t.Start();
                 }
                 else
                 {
-                    statusLabel.Text = "Status: Extraction failed!";
-                    statusLabel.ForeColor = Color.Red;
-                    progressLabel.Text = "Extraction failed!";
+                    statusLabel.Text = "Executable missing after extraction.";
+                    statusLabel.ForeColor = MainUi.Danger;
                 }
             }
             catch (Exception ex)
             {
-                statusLabel.Text = "Status: Extraction failed!";
-                statusLabel.ForeColor = Color.Red;
-                MessageBox.Show($"Error extracting game:\n{ex.Message}", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                statusLabel.Text = "Extraction error.";
+                statusLabel.ForeColor = MainUi.Danger;
+                MessageBox.Show(ex.Message, "Extraction Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void ExtractRarWithProgress(string rarPath, string outputDir)
+        private void ExtractArchive(string rarFile, string destDir)
         {
-            string winrarPath = FindWinRAR();
+            string winrar = LocateUnpackBinary();
+            if (string.IsNullOrEmpty(winrar))
+                throw new Exception("WinRAR or UnRAR was not found on this machine.");
 
-            if (string.IsNullOrEmpty(winrarPath))
-                throw new Exception("WinRAR or UnRAR not found! Please install WinRAR.");
+            string arguments = $"x -y -pSN2020MADEBYNEXOZANDRYZE \"{rarFile}\" \"{destDir}\\\"";
 
-            string args = $"x -y -pHideforpublicrepo \"{rarPath}\" \"{outputDir}\\\"";
-
-            ProcessStartInfo startInfo = new ProcessStartInfo
+            ProcessStartInfo psi = new ProcessStartInfo
             {
-                FileName = winrarPath,
-                Arguments = args,
+                FileName = winrar,
+                Arguments = arguments,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
 
-            using Process process = Process.Start(startInfo);
-            if (process == null) throw new Exception("Failed to start WinRAR process.");
+            using Process proc = Process.Start(psi);
+            if (proc == null) throw new Exception("Failed to start unpacking process.");
 
-            DateTime startTime = DateTime.Now;
+            DateTime start = DateTime.Now;
             int lastProgress = 0;
 
-            while (!process.HasExited)
+            while (!proc.HasExited)
             {
-                int elapsed = (int)(DateTime.Now - startTime).TotalSeconds;
-                int progress = Math.Min(95, (int)(elapsed * 0.5));
+                int sec = (int)(DateTime.Now - start).TotalSeconds;
+                int progress = Math.Min(95, (int)(sec * 0.5));
 
                 if (progress > lastProgress)
                 {
                     lastProgress = progress;
                     progressBar.Value = progress;
-                    progressLabel.Text = $"Extracting... {progress}%";
+                    progressLabel.Text = $"{progress}%";
                 }
 
-                if (Directory.Exists(outputDir) && Directory.GetFiles(outputDir, "*.exe", SearchOption.TopDirectoryOnly).Length > 0)
+                if (Directory.Exists(destDir) && Directory.GetFiles(destDir, "*.exe", SearchOption.TopDirectoryOnly).Length > 0)
                 {
                     progressBar.Value = 95;
-                    progressLabel.Text = "Extracting... 95%";
+                    progressLabel.Text = "95%";
                 }
 
                 Application.DoEvents();
                 System.Threading.Thread.Sleep(200);
             }
 
-            process.WaitForExit();
+            proc.WaitForExit();
 
-            if (process.ExitCode != 0 && process.ExitCode != 1)
+            if (proc.ExitCode != 0 && proc.ExitCode != 1)
             {
-                string error = process.StandardError.ReadToEnd();
-                if (string.IsNullOrEmpty(error)) error = "Unknown error occurred.";
-                throw new Exception($"Extraction failed (code {process.ExitCode}): {error}");
+                string err = proc.StandardError.ReadToEnd();
+                throw new Exception($"Unpack code {proc.ExitCode}: {err}");
             }
 
             progressBar.Value = 100;
-            progressLabel.Text = "Extraction complete! 100%";
+            progressLabel.Text = "100%";
             Application.DoEvents();
         }
 
-        private string FindWinRAR()
+        private string LocateUnpackBinary()
         {
             string[] paths = new string[]
             {
@@ -292,8 +435,8 @@ namespace ProjectOLDR
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "UnRAR.exe")
             };
 
-            foreach (string path in paths)
-                if (File.Exists(path)) return path;
+            foreach (string p in paths)
+                if (File.Exists(p)) return p;
 
             return "";
         }
@@ -302,36 +445,31 @@ namespace ProjectOLDR
         {
             if (!File.Exists(gamePath))
             {
-                statusLabel.Text = "Status: Game not found!";
-                statusLabel.ForeColor = Color.Red;
+                statusLabel.Text = "Executable missing.";
+                statusLabel.ForeColor = MainUi.Danger;
                 playBtn.Enabled = true;
                 return;
             }
 
             try
             {
-                statusLabel.Text = "Status: Launching game...";
-                statusLabel.ForeColor = Color.Yellow;
+                statusLabel.Text = "Starting game...";
+                statusLabel.ForeColor = MainUi.Warning;
                 playBtn.Enabled = false;
 
                 Process.Start(gamePath);
 
-                statusLabel.Text = "Status: Game launched!";
-                statusLabel.ForeColor = Color.LightGreen;
+                statusLabel.Text = "Game running.";
+                statusLabel.ForeColor = MainUi.Accent;
                 playBtn.Enabled = true;
             }
             catch (Exception ex)
             {
-                statusLabel.Text = "Status: Launch failed";
-                statusLabel.ForeColor = Color.Red;
-                MessageBox.Show($"Error launching game:\n{ex.Message}", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                statusLabel.Text = "Launch failed.";
+                statusLabel.ForeColor = MainUi.Danger;
+                MessageBox.Show(ex.Message, "Launch Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 playBtn.Enabled = true;
             }
-        }
-
-        private void PlayBtn_Click(object sender, EventArgs e)
-        {
-            LaunchGame();
         }
     }
 }
