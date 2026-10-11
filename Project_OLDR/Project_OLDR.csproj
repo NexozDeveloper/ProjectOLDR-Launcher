@@ -1,4 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<AssemblyName>ProjectOLDR</AssemblyName>
@@ -16,6 +17,11 @@
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>false</SelfContained>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -29,9 +35,12 @@
 	<ItemGroup>
 		<None Include="libcrypto-4-x64.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
 		<None Include="libssl-4-x64.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
 	</ItemGroup>
+
 </Project>
