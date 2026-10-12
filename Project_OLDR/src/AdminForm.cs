@@ -169,7 +169,7 @@ namespace ProjectOLDR
                 newUserBox.Clear();
                 newPassBox.Clear();
             }
-            else
+            else //e
             {
                 statusLabel.Text = result.Message;
                 statusLabel.ForeColor = Color.Red;
