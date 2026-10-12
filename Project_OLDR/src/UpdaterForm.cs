@@ -1,9 +1,6 @@
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.IO;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ProjectOLDR.UI;
@@ -12,10 +9,8 @@ namespace ProjectOLDR
 {
     public class UpdaterForm : Form
     {
-        private string targetVersion;
-        private string downloadUrl;
-        private bool isMandatory;
-        private int remainingDays;
+        private readonly UpdateInfo info;
+        private bool installing;
 
         private Label titleLabel;
         private Label detailsLabel;
@@ -24,14 +19,16 @@ namespace ProjectOLDR
         private Button updateButton;
         private Button laterButton;
 
-        public UpdaterForm(string targetVersion, string downloadUrl, bool isMandatory, int remainingDays)
+        public UpdaterForm(UpdateInfo info)
         {
-            this.targetVersion = targetVersion;
-            this.downloadUrl = downloadUrl;
-            this.isMandatory = isMandatory;
-            this.remainingDays = remainingDays;
-
+            this.info = info;
             BuildUI();
+
+            this.FormClosing += (s, e) =>
+            {
+                if (info.IsMandatory && !installing)
+                    Environment.Exit(0);
+            };
         }
 
         private void BuildUI()
@@ -60,16 +57,16 @@ namespace ProjectOLDR
 
             titleLabel = new Label
             {
-                Text = isMandatory ? "MANDATORY UPDATE REQUIRED" : "NEW UPDATE AVAILABLE",
+                Text = info.IsMandatory ? "MANDATORY UPDATE REQUIRED" : "NEW UPDATE AVAILABLE",
                 Font = MainUi.HeaderMedium,
-                ForeColor = isMandatory ? MainUi.Danger : MainUi.Warning,
+                ForeColor = info.IsMandatory ? MainUi.Danger : MainUi.Warning,
                 Location = new Point(24, 20),
                 AutoSize = true
             };
 
-            string subtitle = isMandatory
-                ? $"Release {targetVersion} is required to continue playing. The grace period has ended."
-                : $"Release {targetVersion} is ready to install ({remainingDays} day(s) before mandatory update).";
+            string subtitle = info.IsMandatory
+                ? $"Release {info.Tag} is required to continue playing. The grace period has ended."
+                : $"Release {info.Tag} is ready to install ({info.RemainingDays} day(s) before it becomes mandatory).";
 
             detailsLabel = new Label
             {
@@ -90,7 +87,7 @@ namespace ProjectOLDR
 
             statusLabel = new Label
             {
-                Text = "Ready to download and replace executable files.",
+                Text = "Ready to download and replace the launcher.",
                 Font = MainUi.Small,
                 ForeColor = MainUi.TextMuted,
                 Location = new Point(24, 126),
@@ -101,11 +98,11 @@ namespace ProjectOLDR
             updateButton = MainUi.CreateStyledButton("Update Now", 24, 166, 160, 44, MainUi.Accent, MainUi.AccentHover);
             updateButton.Click += async (s, e) => await StartInstallationAsync();
 
-            laterButton = MainUi.CreateStyledButton(isMandatory ? "Exit Client" : "Later", 196, 166, 120, 44, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            laterButton = MainUi.CreateStyledButton(info.IsMandatory ? "Exit Client" : "Later", 196, 166, 120, 44, MainUi.SurfaceHighlight, MainUi.BorderColor);
             laterButton.Click += (s, e) =>
             {
-                if (isMandatory)
-                    Application.Exit();
+                if (info.IsMandatory)
+                    Environment.Exit(0);
                 else
                     this.Close();
             };
@@ -122,62 +119,32 @@ namespace ProjectOLDR
 
         private async Task StartInstallationAsync()
         {
+            installing = true;
             updateButton.Enabled = false;
             laterButton.Enabled = false;
+            downloadBar.Value = 0;
             downloadBar.Visible = true;
-            downloadBar.Value = 20;
-
-            statusLabel.Text = "Downloading updated client binary...";
             statusLabel.ForeColor = MainUi.Warning;
 
-            string currentExePath = Process.GetCurrentProcess().MainModule.FileName;
-            string tempDownloadedFile = Path.Combine(Path.GetTempPath(), "ProjectOLDR_new.exe");
-            string updaterScript = Path.Combine(Path.GetTempPath(), "oldr_updater.bat");
-            string deadlineFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProjectOLDR", "update_deadline.dat");
+            Progress<int> progress = new Progress<int>(value =>
+            {
+                downloadBar.Value = Math.Max(0, Math.Min(100, value));
+            });
+
+            Progress<string> status = new Progress<string>(text =>
+            {
+                statusLabel.Text = text;
+            });
 
             try
             {
-                using (HttpClient client = new HttpClient())
-                {
-                    client.DefaultRequestHeaders.Add("User-Agent", "ProjectOLDR-AutoUpdater");
-                    byte[] data = await client.GetByteArrayAsync(downloadUrl);
-                    await File.WriteAllBytesAsync(tempDownloadedFile, data);
-                }
-
-                downloadBar.Value = 80;
-                statusLabel.Text = "Deploying replacement script...";
-
-                string batchContent = $@"@echo off
-timeout /t 2 /nobreak > nul
-:retry
-del ""{currentExePath}"" > nul 2>&1
-if exist ""{currentExePath}"" (
-    timeout /t 1 /nobreak > nul
-    goto retry
-)
-move /y ""{tempDownloadedFile}"" ""{currentExePath}""
-start """" ""{currentExePath}""
-del ""%~f0""
-exit
-";
-                await File.WriteAllTextAsync(updaterScript, batchContent);
-
-                if (File.Exists(deadlineFilePath)) File.Delete(deadlineFilePath);
-
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = updaterScript,
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-                Process.Start(psi);
-
-                Application.Exit();
+                await Updater.ApplyAsync(info, progress, status);
             }
             catch (Exception ex)
             {
+                installing = false;
                 downloadBar.Visible = false;
-                statusLabel.Text = "Download failed.";
+                statusLabel.Text = "Update failed.";
                 statusLabel.ForeColor = MainUi.Danger;
                 updateButton.Enabled = true;
                 laterButton.Enabled = true;
