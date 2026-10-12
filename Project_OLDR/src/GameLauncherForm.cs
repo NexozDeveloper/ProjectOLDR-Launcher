@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json.Linq;
@@ -12,7 +13,7 @@ namespace ProjectOLDR
 {
     public class GameLauncherForm : Form
     {
-        private const string CurrentLauncherVersion = "2.0.0.0";
+        private const string CurrentLauncherVersion = "2.0.0.1";
 
         private Panel topBar;
         private Panel heroCard;
@@ -24,9 +25,9 @@ namespace ProjectOLDR
         private Label gameTitle;
         private Label gameInfo;
         private Button playBtn;
+        private Button updateBtn;
         private Button themeBtn;
         private Button friendsBtn;
-        private Button updateBtn;
         private Button logoutBtn;
         private ProgressBar progressBar;
         private Label progressLabel;
@@ -35,9 +36,11 @@ namespace ProjectOLDR
         private string appDataPath = "";
         private string documentsPath = "";
         private string rarPath = "";
+        private string deadlineFilePath = "";
         private string currentUsername;
         private System.Windows.Forms.Timer refreshTimer;
         private Action themeListener;
+        private Action rainbowListener;
 
         public GameLauncherForm(string username)
         {
@@ -48,14 +51,27 @@ namespace ProjectOLDR
             themeListener = () => ApplyThemeColors();
             MainUi.OnThemeChanged += themeListener;
 
-            this.Shown += async (s, e) => await InitializeDashboardAsync();
+            rainbowListener = () =>
+            {
+                playBtn.BackColor = MainUi.Accent;
+                playBtn.Invalidate();
+                this.Invalidate(new Rectangle(0, 0, this.Width, 42));
+            };
+            MainUi.OnRainbowTick += rainbowListener;
+
+            this.Shown += async (s, e) =>
+            {
+                ApplyThemeColors();
+                await InitializeDashboardAsync();
+                await CheckUpdatesWorkflowAsync(false);
+            };
             this.FormClosed += GameLauncherForm_FormClosed;
         }
 
         private void BuildUI()
         {
             this.Text = "Project OLDR";
-            this.Size = new Size(740, 480);
+            this.Size = new Size(1020, 640);
             this.BackColor = MainUi.BgColor;
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -75,11 +91,11 @@ namespace ProjectOLDR
 
             this.Controls.Add(MainUi.CreateTitleBar(this, "Project OLDR - Game Client"));
 
-            topBar = MainUi.CreateContainer(20, 56, 700, 64);
+            topBar = MainUi.CreateContainer(24, 56, 972, 70);
 
             Panel avatar = new Panel
             {
-                Location = new Point(16, 12),
+                Location = new Point(18, 15),
                 Size = new Size(40, 40),
                 BackColor = MainUi.SurfaceHighlight
             };
@@ -99,7 +115,7 @@ namespace ProjectOLDR
                 Text = currentUsername,
                 Font = MainUi.HeaderMedium,
                 ForeColor = MainUi.TextPrimary,
-                Location = new Point(66, 12),
+                Location = new Point(68, 14),
                 AutoSize = true
             };
 
@@ -108,11 +124,11 @@ namespace ProjectOLDR
                 Text = "● Checking Network...",
                 Font = MainUi.Small,
                 ForeColor = MainUi.Warning,
-                Location = new Point(67, 36),
+                Location = new Point(69, 39),
                 AutoSize = true
             };
 
-            playersBadge = MainUi.CreateContainer(205, 14, 180, 36);
+            playersBadge = MainUi.CreateContainer(370, 15, 240, 40);
             onlinePlayersLabel = new Label
             {
                 Text = "Players in launcher: ...",
@@ -123,21 +139,21 @@ namespace ProjectOLDR
             };
             playersBadge.Controls.Add(onlinePlayersLabel);
 
-            themeBtn = MainUi.CreateStyledButton("Themes", 395, 14, 95, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            themeBtn = MainUi.CreateStyledButton("Themes", 670, 16, 90, 38, MainUi.SurfaceHighlight, MainUi.BorderColor);
             themeBtn.Click += (s, e) =>
             {
                 using (ThemeForm form = new ThemeForm(this))
                     form.ShowDialog(this);
             };
 
-            friendsBtn = MainUi.CreateStyledButton("Friends", 498, 14, 95, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            friendsBtn = MainUi.CreateStyledButton("Friends", 768, 16, 90, 38, MainUi.SurfaceHighlight, MainUi.BorderColor);
             friendsBtn.Click += (s, e) =>
             {
                 using (FriendsForm form = new FriendsForm(currentUsername))
                     form.ShowDialog(this);
             };
 
-            logoutBtn = MainUi.CreateStyledButton("Sign Out", 601, 14, 85, 36, Color.FromArgb(40, 20, 25), MainUi.Danger);
+            logoutBtn = MainUi.CreateStyledButton("Sign Out", 866, 16, 88, 38, Color.FromArgb(40, 20, 25), MainUi.Danger);
             logoutBtn.Click += async (s, e) => await SignOutAsync();
 
             topBar.Controls.Add(avatar);
@@ -148,30 +164,30 @@ namespace ProjectOLDR
             topBar.Controls.Add(friendsBtn);
             topBar.Controls.Add(logoutBtn);
 
-            heroCard = MainUi.CreateContainer(20, 132, 700, 326);
+            heroCard = MainUi.CreateContainer(24, 142, 972, 472);
 
             gameTitle = new Label
             {
                 Text = "SECRET NEIGHBOR",
-                Font = new Font("Segoe UI", 22, FontStyle.Bold),
+                Font = new Font("Segoe UI", 28, FontStyle.Bold),
                 ForeColor = MainUi.TextPrimary,
-                Location = new Point(28, 24),
+                Location = new Point(36, 32),
                 AutoSize = true
             };
 
             gameInfo = new Label
             {
                 Text = "Direct Network Play • Build 2020",
-                Font = MainUi.Regular,
+                Font = MainUi.HeaderMedium,
                 ForeColor = MainUi.TextSecondary,
-                Location = new Point(30, 64),
+                Location = new Point(38, 86),
                 AutoSize = true
             };
 
             progressBar = new ProgressBar
             {
-                Location = new Point(30, 125),
-                Size = new Size(640, 14),
+                Location = new Point(38, 205),
+                Size = new Size(896, 16),
                 Style = ProgressBarStyle.Continuous,
                 Visible = false
             };
@@ -181,36 +197,37 @@ namespace ProjectOLDR
                 Text = "",
                 Font = MainUi.Small,
                 ForeColor = MainUi.TextMuted,
-                Location = new Point(30, 145),
-                Size = new Size(640, 18),
+                Location = new Point(38, 228),
+                Size = new Size(896, 20),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Visible = false
             };
 
-            playBtn = MainUi.CreateStyledButton("PLAY GAME", 30, 195, 200, 52, MainUi.Accent, MainUi.AccentHover);
-            playBtn.Font = new Font("Segoe UI", 12, FontStyle.Bold);
+            playBtn = MainUi.CreateStyledButton("PLAY GAME", 38, 305, 250, 60, MainUi.Accent, MainUi.AccentHover);
+            playBtn.Font = new Font("Segoe UI", 13, FontStyle.Bold);
             playBtn.Enabled = false;
             playBtn.Click += (s, e) => LaunchGame();
 
-            updateBtn = MainUi.CreateStyledButton("Check Updates", 244, 201, 160, 42, MainUi.SurfaceHighlight, MainUi.BorderColor);
-            updateBtn.Click += async (s, e) => await CheckGitHubUpdateAsync();
+            updateBtn = MainUi.CreateStyledButton("Check Updates", 306, 313, 175, 46, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            updateBtn.Font = MainUi.HeaderMedium;
+            updateBtn.Click += async (s, e) => await CheckUpdatesWorkflowAsync(true);
 
             statusLabel = new Label
             {
                 Text = "Checking local files...",
                 Font = MainUi.Regular,
                 ForeColor = MainUi.TextMuted,
-                Location = new Point(30, 275),
-                Size = new Size(480, 25)
+                Location = new Point(38, 410),
+                Size = new Size(700, 25)
             };
 
             versionLabel = new Label
             {
                 Text = $"v{CurrentLauncherVersion}",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = MainUi.TextMuted,
-                Location = new Point(570, 278),
-                Size = new Size(100, 20),
+                Location = new Point(818, 410),
+                Size = new Size(116, 25),
                 TextAlign = ContentAlignment.MiddleRight
             };
 
@@ -253,6 +270,7 @@ namespace ProjectOLDR
             documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             gamePath = Path.Combine(appDataPath, "Secret Neighbour.exe");
             rarPath = Path.Combine(documentsPath, "game.rar");
+            deadlineFilePath = Path.Combine(appDataPath, "update_deadline.dat");
 
             Directory.CreateDirectory(appDataPath);
         }
@@ -290,6 +308,164 @@ namespace ProjectOLDR
             }
         }
 
+        private async Task CheckUpdatesWorkflowAsync(bool manualClick)
+        {
+            updateBtn.Enabled = false;
+            updateBtn.Text = "Checking...";
+
+            var res = await SupabaseApi.CheckGitHubUpdateAsync(CurrentLauncherVersion);
+            if (!res.Success)
+            {
+                updateBtn.Text = "Check Updates";
+                updateBtn.Enabled = true;
+                if (manualClick)
+                {
+                    MessageBox.Show(res.Message, "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
+
+            try
+            {
+                JObject obj = JObject.Parse(res.Data);
+                bool hasUpdate = (bool)obj["has_update"];
+
+                if (!hasUpdate)
+                {
+                    if (File.Exists(deadlineFilePath)) File.Delete(deadlineFilePath);
+                    updateBtn.Text = "Up to date ✓";
+                    updateBtn.ForeColor = MainUi.Accent;
+                    if (manualClick)
+                    {
+                        MessageBox.Show("Your client is completely up to date.", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    updateBtn.Enabled = true;
+                    return;
+                }
+
+                string tag = (string)obj["tag"];
+                string downloadUrl = (string)obj["url"];
+
+                updateBtn.Text = "Update Ready !";
+                updateBtn.ForeColor = MainUi.Warning;
+
+                DateTime firstDetected = DateTime.UtcNow;
+                if (File.Exists(deadlineFilePath))
+                {
+                    string rawDate = File.ReadAllText(deadlineFilePath).Trim();
+                    if (!DateTime.TryParse(rawDate, out firstDetected))
+                    {
+                        firstDetected = DateTime.UtcNow;
+                        File.WriteAllText(deadlineFilePath, firstDetected.ToString("o"));
+                    }
+                }
+                else
+                {
+                    File.WriteAllText(deadlineFilePath, firstDetected.ToString("o"));
+                }
+
+                TimeSpan elapsed = DateTime.UtcNow - firstDetected;
+                bool isForced = elapsed.TotalDays >= 7;
+
+                if (isForced)
+                {
+                    MessageBox.Show(
+                        $"A mandatory update ({tag}) is required to continue playing. The 7-day grace period has expired.\n\nThe launcher will now update automatically.",
+                        "Mandatory Update Required",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    await PerformSelfUpdateAsync(downloadUrl);
+                }
+                else
+                {
+                    int daysLeft = Math.Max(1, 7 - (int)elapsed.TotalDays);
+                    var choice = MessageBox.Show(
+                        $"A new update ({tag}) is available!\n\nWould you like to install it automatically?\n(You have {daysLeft} day(s) left before this update becomes mandatory)",
+                        "Update Available",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Information);
+
+                    if (choice == DialogResult.Yes)
+                    {
+                        await PerformSelfUpdateAsync(downloadUrl);
+                    }
+                }
+            }
+            catch
+            {
+                updateBtn.Text = "Check Updates";
+            }
+
+            updateBtn.Enabled = true;
+        }
+
+        private async Task PerformSelfUpdateAsync(string downloadUrl)
+        {
+            statusLabel.Text = "Downloading update...";
+            statusLabel.ForeColor = MainUi.Warning;
+            playBtn.Enabled = false;
+            updateBtn.Enabled = false;
+            progressBar.Visible = true;
+            progressLabel.Visible = true;
+            progressBar.Value = 20;
+            progressLabel.Text = "Downloading binary...";
+
+            string currentExePath = Process.GetCurrentProcess().MainModule.FileName;
+            string tempDownloadedFile = Path.Combine(Path.GetTempPath(), "ProjectOLDR_new.exe");
+            string updaterScript = Path.Combine(Path.GetTempPath(), "oldr_updater.bat");
+
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Add("User-Agent", "ProjectOLDR-AutoUpdater");
+                    byte[] data = await client.GetByteArrayAsync(downloadUrl);
+                    await File.WriteAllBytesAsync(tempDownloadedFile, data);
+                }
+
+                progressBar.Value = 80;
+                progressLabel.Text = "Applying update...";
+
+                string batchContent = $@"@echo off
+timeout /t 2 /nobreak > nul
+:retry
+del ""{currentExePath}"" > nul 2>&1
+if exist ""{currentExePath}"" (
+    timeout /t 1 /nobreak > nul
+    goto retry
+)
+move /y ""{tempDownloadedFile}"" ""{currentExePath}""
+start """" ""{currentExePath}""
+del ""%~f0""
+exit
+";
+                await File.WriteAllTextAsync(updaterScript, batchContent);
+
+                if (File.Exists(deadlineFilePath)) File.Delete(deadlineFilePath);
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = updaterScript,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                progressBar.Visible = false;
+                progressLabel.Visible = false;
+                statusLabel.Text = "Update failed.";
+                statusLabel.ForeColor = MainUi.Danger;
+                playBtn.Enabled = true;
+                updateBtn.Enabled = true;
+                MessageBox.Show(ex.Message, "Auto-Update Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private async Task SignOutAsync()
         {
             if (refreshTimer != null)
@@ -307,6 +483,9 @@ namespace ProjectOLDR
             if (themeListener != null)
                 MainUi.OnThemeChanged -= themeListener;
 
+            if (rainbowListener != null)
+                MainUi.OnRainbowTick -= rainbowListener;
+
             if (refreshTimer != null)
             {
                 refreshTimer.Stop();
@@ -320,64 +499,6 @@ namespace ProjectOLDR
             catch
             {
             }
-        }
-
-        private async Task CheckGitHubUpdateAsync()
-        {
-            updateBtn.Enabled = false;
-            statusLabel.Text = "Checking GitHub releases...";
-            statusLabel.ForeColor = MainUi.TextMuted;
-
-            var res = await SupabaseApi.CheckGitHubUpdateAsync(CurrentLauncherVersion);
-            if (res.Success)
-            {
-                try
-                {
-                    JObject obj = JObject.Parse(res.Data);
-                    bool hasUpdate = (bool)obj["has_update"];
-                    string tag = (string)obj["tag"];
-                    string downloadUrl = (string)obj["url"];
-
-                    if (hasUpdate)
-                    {
-                        var confirm = MessageBox.Show(
-                            $"A new launcher version is available: {tag} (Current: v{CurrentLauncherVersion})\n\nOpen download page?",
-                            "Update Available",
-                            MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Information);
-
-                        if (confirm == DialogResult.Yes && !string.IsNullOrEmpty(downloadUrl))
-                        {
-                            Process.Start(new ProcessStartInfo
-                            {
-                                FileName = downloadUrl,
-                                UseShellExecute = true
-                            });
-                        }
-                        statusLabel.Text = $"Update detected: {tag}";
-                        statusLabel.ForeColor = MainUi.Warning;
-                    }
-                    else
-                    {
-                        MessageBox.Show("You are fully updated.", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        statusLabel.Text = "You are fully updated.";
-                        statusLabel.ForeColor = MainUi.Accent;
-                    }
-                }
-                catch
-                {
-                    statusLabel.Text = "Failed to parse update manifest.";
-                    statusLabel.ForeColor = MainUi.Danger;
-                }
-            }
-            else
-            {
-                MessageBox.Show(res.Message, "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                statusLabel.Text = "Could not check for updates.";
-                statusLabel.ForeColor = MainUi.Danger;
-            }
-
-            updateBtn.Enabled = true;
         }
 
         private void CheckAndExtractGame()
