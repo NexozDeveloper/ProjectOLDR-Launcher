@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -13,10 +14,16 @@ namespace ProjectOLDR.UI
         FullWhite,
         Transparent,
         Rainbow,
-        Red,
-        Blue,
-        Purple,
-        Gold
+        Emerald,
+        OceanBlue,
+        Cyan,
+        CrimsonRed,
+        CyberPink,
+        ElectricViolet,
+        SunsetOrange,
+        SolarGold,
+        Mint,
+        Custom
     }
 
     public static class IconRenderer
@@ -57,6 +64,53 @@ namespace ProjectOLDR.UI
                 g.FillEllipse(brush, r.Right - 7, r.Y + r.Height / 2 - 2, 3, 3);
             }
         }
+
+        public static void DrawPaintBrush(Graphics g, Rectangle r, Color tipColor)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            using (Matrix m = new Matrix())
+            {
+                PointF center = new PointF(r.X + r.Width / 2f, r.Y + r.Height / 2f);
+                m.RotateAt(-45, center);
+                g.Transform = m;
+
+                int cx = (int)center.X;
+                int cy = (int)center.Y;
+
+                using (SolidBrush handleBrush = new SolidBrush(Color.FromArgb(175, 140, 105)))
+                {
+                    Point[] handle = new Point[]
+                    {
+                        new Point(cx - 3, cy + 2),
+                        new Point(cx + 3, cy + 2),
+                        new Point(cx + 1, cy + 16),
+                        new Point(cx - 1, cy + 16)
+                    };
+                    g.FillPolygon(handleBrush, handle);
+                }
+
+                using (SolidBrush ferruleBrush = new SolidBrush(Color.FromArgb(200, 205, 215)))
+                {
+                    g.FillRectangle(ferruleBrush, cx - 4, cy - 4, 8, 6);
+                }
+
+                using (SolidBrush bristleBrush = new SolidBrush(tipColor))
+                {
+                    Point[] bristles = new Point[]
+                    {
+                        new Point(cx - 4, cy - 4),
+                        new Point(cx + 4, cy - 4),
+                        new Point(cx + 2, cy - 13),
+                        new Point(cx, cy - 15),
+                        new Point(cx - 2, cy - 13)
+                    };
+                    g.FillPolygon(bristleBrush, bristles);
+                }
+
+                g.ResetTransform();
+            }
+        }
     }
 
     public static class MainUi
@@ -77,32 +131,40 @@ namespace ProjectOLDR.UI
         public static Color TextSecondary { get; private set; } = Color.FromArgb(130, 140, 160);
         public static Color TextMuted { get; private set; } = Color.FromArgb(85, 95, 115);
 
+        public static Color CustomColorValue { get; private set; } = Color.FromArgb(0, 230, 153);
+
         public static readonly Font HeaderLarge = new Font("Segoe UI", 16, FontStyle.Bold);
         public static readonly Font HeaderMedium = new Font("Segoe UI", 11, FontStyle.Bold);
         public static readonly Font Regular = new Font("Segoe UI", 9.5f, FontStyle.Regular);
         public static readonly Font Small = new Font("Segoe UI", 8.5f, FontStyle.Regular);
 
         public static event Action OnThemeChanged;
+        public static event Action OnRainbowTick;
+
         private static Timer rainbowTimer;
         private static float rainbowHue = 0f;
 
+        private static string ThemeSavePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProjectOLDR", "theme.dat");
+
         static MainUi()
         {
-            rainbowTimer = new Timer { Interval = 40 };
+            rainbowTimer = new Timer { Interval = 60 };
             rainbowTimer.Tick += (s, e) =>
             {
                 if (CurrentTheme == LauncherTheme.Rainbow)
                 {
-                    rainbowHue = (rainbowHue + 4f) % 360f;
+                    rainbowHue = (rainbowHue + 1.5f) % 360f;
                     Accent = ColorFromHsv(rainbowHue, 0.85, 1.0);
-                    AccentHover = ColorFromHsv((rainbowHue + 20f) % 360f, 0.85, 1.0);
-                    BorderColor = ColorFromHsv(rainbowHue, 0.5, 0.5);
-                    OnThemeChanged?.Invoke();
+                    AccentHover = ColorFromHsv((rainbowHue + 12f) % 360f, 0.85, 1.0);
+                    BorderColor = ColorFromHsv(rainbowHue, 0.45, 0.45);
+                    OnRainbowTick?.Invoke();
                 }
             };
+
+            LoadSavedTheme();
         }
 
-        public static void SetTheme(LauncherTheme theme, Form activeForm = null)
+        public static void SetTheme(LauncherTheme theme, Form activeForm = null, Color? customColor = null)
         {
             CurrentTheme = theme;
 
@@ -116,6 +178,9 @@ namespace ProjectOLDR.UI
                 else
                     activeForm.Opacity = 1.0;
             }
+
+            if (customColor.HasValue)
+                CustomColorValue = customColor.Value;
 
             switch (theme)
             {
@@ -153,52 +218,127 @@ namespace ProjectOLDR.UI
                     rainbowTimer.Start();
                     break;
 
-                case LauncherTheme.Red:
-                    BgColor = Color.FromArgb(18, 10, 12);
-                    SurfaceColor = Color.FromArgb(28, 15, 18);
-                    SurfaceHighlight = Color.FromArgb(42, 22, 28);
-                    BorderColor = Color.FromArgb(70, 30, 38);
-                    Accent = Color.FromArgb(255, 55, 85);
-                    AccentHover = Color.FromArgb(255, 85, 115);
-                    TextPrimary = Color.FromArgb(250, 245, 245);
-                    TextSecondary = Color.FromArgb(180, 140, 145);
-                    TextMuted = Color.FromArgb(115, 85, 90);
+                case LauncherTheme.Emerald:
+                    BgColor = Color.FromArgb(8, 16, 12);
+                    SurfaceColor = Color.FromArgb(14, 26, 20);
+                    SurfaceHighlight = Color.FromArgb(20, 38, 28);
+                    BorderColor = Color.FromArgb(32, 60, 44);
+                    Accent = Color.FromArgb(16, 212, 128);
+                    AccentHover = Color.FromArgb(40, 235, 150);
+                    TextPrimary = Color.FromArgb(245, 252, 248);
+                    TextSecondary = Color.FromArgb(135, 165, 150);
+                    TextMuted = Color.FromArgb(85, 110, 98);
                     break;
 
-                case LauncherTheme.Blue:
-                    BgColor = Color.FromArgb(10, 14, 22);
-                    SurfaceColor = Color.FromArgb(16, 22, 34);
-                    SurfaceHighlight = Color.FromArgb(24, 34, 52);
-                    BorderColor = Color.FromArgb(38, 54, 82);
-                    Accent = Color.FromArgb(0, 160, 255);
-                    AccentHover = Color.FromArgb(40, 180, 255);
+                case LauncherTheme.OceanBlue:
+                    BgColor = Color.FromArgb(8, 14, 24);
+                    SurfaceColor = Color.FromArgb(14, 22, 36);
+                    SurfaceHighlight = Color.FromArgb(20, 32, 52);
+                    BorderColor = Color.FromArgb(34, 52, 82);
+                    Accent = Color.FromArgb(30, 144, 255);
+                    AccentHover = Color.FromArgb(65, 170, 255);
                     TextPrimary = Color.FromArgb(245, 248, 255);
-                    TextSecondary = Color.FromArgb(140, 160, 190);
-                    TextMuted = Color.FromArgb(90, 105, 130);
+                    TextSecondary = Color.FromArgb(135, 155, 185);
+                    TextMuted = Color.FromArgb(85, 105, 130);
                     break;
 
-                case LauncherTheme.Purple:
-                    BgColor = Color.FromArgb(14, 10, 20);
-                    SurfaceColor = Color.FromArgb(22, 16, 32);
-                    SurfaceHighlight = Color.FromArgb(34, 24, 48);
-                    BorderColor = Color.FromArgb(60, 40, 85);
-                    Accent = Color.FromArgb(185, 75, 255);
-                    AccentHover = Color.FromArgb(205, 105, 255);
+                case LauncherTheme.Cyan:
+                    BgColor = Color.FromArgb(8, 18, 20);
+                    SurfaceColor = Color.FromArgb(12, 28, 32);
+                    SurfaceHighlight = Color.FromArgb(18, 42, 48);
+                    BorderColor = Color.FromArgb(30, 68, 76);
+                    Accent = Color.FromArgb(0, 225, 235);
+                    AccentHover = Color.FromArgb(40, 245, 255);
+                    TextPrimary = Color.FromArgb(245, 254, 255);
+                    TextSecondary = Color.FromArgb(130, 165, 175);
+                    TextMuted = Color.FromArgb(80, 115, 125);
+                    break;
+
+                case LauncherTheme.CrimsonRed:
+                    BgColor = Color.FromArgb(18, 8, 10);
+                    SurfaceColor = Color.FromArgb(28, 14, 18);
+                    SurfaceHighlight = Color.FromArgb(42, 20, 26);
+                    BorderColor = Color.FromArgb(68, 30, 38);
+                    Accent = Color.FromArgb(255, 55, 75);
+                    AccentHover = Color.FromArgb(255, 90, 105);
+                    TextPrimary = Color.FromArgb(255, 245, 246);
+                    TextSecondary = Color.FromArgb(180, 140, 145);
+                    TextMuted = Color.FromArgb(120, 85, 90);
+                    break;
+
+                case LauncherTheme.CyberPink:
+                    BgColor = Color.FromArgb(18, 8, 16);
+                    SurfaceColor = Color.FromArgb(28, 14, 24);
+                    SurfaceHighlight = Color.FromArgb(42, 20, 36);
+                    BorderColor = Color.FromArgb(68, 30, 58);
+                    Accent = Color.FromArgb(255, 60, 170);
+                    AccentHover = Color.FromArgb(255, 100, 195);
+                    TextPrimary = Color.FromArgb(255, 245, 252);
+                    TextSecondary = Color.FromArgb(180, 140, 170);
+                    TextMuted = Color.FromArgb(120, 85, 110);
+                    break;
+
+                case LauncherTheme.ElectricViolet:
+                    BgColor = Color.FromArgb(14, 8, 22);
+                    SurfaceColor = Color.FromArgb(22, 14, 34);
+                    SurfaceHighlight = Color.FromArgb(34, 22, 52);
+                    BorderColor = Color.FromArgb(56, 34, 84);
+                    Accent = Color.FromArgb(170, 75, 255);
+                    AccentHover = Color.FromArgb(195, 115, 255);
                     TextPrimary = Color.FromArgb(250, 245, 255);
-                    TextSecondary = Color.FromArgb(170, 150, 190);
-                    TextMuted = Color.FromArgb(115, 95, 130);
+                    TextSecondary = Color.FromArgb(170, 145, 190);
+                    TextMuted = Color.FromArgb(115, 90, 135);
                     break;
 
-                case LauncherTheme.Gold:
-                    BgColor = Color.FromArgb(16, 14, 10);
-                    SurfaceColor = Color.FromArgb(26, 22, 16);
-                    SurfaceHighlight = Color.FromArgb(40, 34, 24);
-                    BorderColor = Color.FromArgb(70, 60, 40);
+                case LauncherTheme.SunsetOrange:
+                    BgColor = Color.FromArgb(20, 10, 6);
+                    SurfaceColor = Color.FromArgb(30, 16, 10);
+                    SurfaceHighlight = Color.FromArgb(46, 26, 16);
+                    BorderColor = Color.FromArgb(74, 42, 24);
+                    Accent = Color.FromArgb(255, 115, 30);
+                    AccentHover = Color.FromArgb(255, 145, 65);
+                    TextPrimary = Color.FromArgb(255, 248, 242);
+                    TextSecondary = Color.FromArgb(185, 150, 130);
+                    TextMuted = Color.FromArgb(125, 95, 80);
+                    break;
+
+                case LauncherTheme.SolarGold:
+                    BgColor = Color.FromArgb(18, 14, 6);
+                    SurfaceColor = Color.FromArgb(28, 22, 10);
+                    SurfaceHighlight = Color.FromArgb(44, 34, 16);
+                    BorderColor = Color.FromArgb(72, 56, 26);
                     Accent = Color.FromArgb(255, 195, 0);
                     AccentHover = Color.FromArgb(255, 215, 50);
-                    TextPrimary = Color.FromArgb(255, 250, 240);
-                    TextSecondary = Color.FromArgb(190, 175, 150);
-                    TextMuted = Color.FromArgb(125, 115, 95);
+                    TextPrimary = Color.FromArgb(255, 252, 240);
+                    TextSecondary = Color.FromArgb(185, 170, 135);
+                    TextMuted = Color.FromArgb(120, 110, 85);
+                    break;
+
+                case LauncherTheme.Mint:
+                    BgColor = Color.FromArgb(8, 18, 16);
+                    SurfaceColor = Color.FromArgb(12, 28, 24);
+                    SurfaceHighlight = Color.FromArgb(18, 42, 36);
+                    BorderColor = Color.FromArgb(28, 66, 56);
+                    Accent = Color.FromArgb(45, 230, 180);
+                    AccentHover = Color.FromArgb(85, 245, 205);
+                    TextPrimary = Color.FromArgb(245, 255, 252);
+                    TextSecondary = Color.FromArgb(135, 175, 165);
+                    TextMuted = Color.FromArgb(85, 120, 110);
+                    break;
+
+                case LauncherTheme.Custom:
+                    int r = CustomColorValue.R;
+                    int g = CustomColorValue.G;
+                    int b = CustomColorValue.B;
+                    BgColor = Color.FromArgb(Math.Max(6, r / 16), Math.Max(6, g / 16), Math.Max(8, b / 16));
+                    SurfaceColor = Color.FromArgb(Math.Max(12, r / 10), Math.Max(12, g / 10), Math.Max(16, b / 10));
+                    SurfaceHighlight = Color.FromArgb(Math.Max(20, r / 7), Math.Max(20, g / 7), Math.Max(26, b / 7));
+                    BorderColor = Color.FromArgb(Math.Max(35, r / 4), Math.Max(35, g / 4), Math.Max(45, b / 4));
+                    Accent = CustomColorValue;
+                    AccentHover = ControlPaint.Light(CustomColorValue, 0.25f);
+                    TextPrimary = Color.FromArgb(245, 247, 250);
+                    TextSecondary = Color.FromArgb(160, 165, 180);
+                    TextMuted = Color.FromArgb(100, 105, 120);
                     break;
 
                 case LauncherTheme.Transparent:
@@ -216,7 +356,43 @@ namespace ProjectOLDR.UI
                     break;
             }
 
+            SaveCurrentTheme();
             OnThemeChanged?.Invoke();
+        }
+
+        private static void SaveCurrentTheme()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(ThemeSavePath);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                string data = $"{CurrentTheme};{CustomColorValue.ToArgb()}";
+                File.WriteAllText(ThemeSavePath, data);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void LoadSavedTheme()
+        {
+            try
+            {
+                if (File.Exists(ThemeSavePath))
+                {
+                    string content = File.ReadAllText(ThemeSavePath).Trim();
+                    string[] parts = content.Split(';');
+                    if (parts.Length >= 2 && Enum.TryParse(parts[0], out LauncherTheme theme) && int.TryParse(parts[1], out int argb))
+                    {
+                        CustomColorValue = Color.FromArgb(argb);
+                        SetTheme(theme, null, CustomColorValue);
+                    }
+                }
+            }
+            catch
+            {
+            }
         }
 
         private static Color ColorFromHsv(double hue, double saturation, double value)
@@ -268,7 +444,7 @@ namespace ProjectOLDR.UI
             {
                 Dock = DockStyle.Top,
                 Height = 42,
-                BackColor = Color.FromArgb(13, 15, 20)
+                BackColor = SurfaceColor
             };
 
             bar.Paint += (s, e) =>
