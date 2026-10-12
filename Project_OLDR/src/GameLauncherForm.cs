@@ -14,11 +14,17 @@ namespace ProjectOLDR
     {
         private const string CurrentLauncherVersion = "2.0.0.0";
 
+        private Panel topBar;
+        private Panel heroCard;
+        private Panel playersBadge;
         private Label statusLabel;
         private Label dbStatusLabel;
         private Label onlinePlayersLabel;
         private Label versionLabel;
+        private Label gameTitle;
+        private Label gameInfo;
         private Button playBtn;
+        private Button themeBtn;
         private Button friendsBtn;
         private Button updateBtn;
         private Button logoutBtn;
@@ -31,12 +37,16 @@ namespace ProjectOLDR
         private string rarPath = "";
         private string currentUsername;
         private System.Windows.Forms.Timer refreshTimer;
+        private Action themeListener;
 
         public GameLauncherForm(string username)
         {
             currentUsername = username;
             BuildUI();
             InitializePaths();
+
+            themeListener = () => ApplyThemeColors();
+            MainUi.OnThemeChanged += themeListener;
 
             this.Shown += async (s, e) => await InitializeDashboardAsync();
             this.FormClosed += GameLauncherForm_FormClosed;
@@ -65,7 +75,7 @@ namespace ProjectOLDR
 
             this.Controls.Add(MainUi.CreateTitleBar(this, "Project OLDR - Game Client"));
 
-            Panel topBar = MainUi.CreateContainer(20, 56, 700, 64);
+            topBar = MainUi.CreateContainer(20, 56, 700, 64);
 
             Panel avatar = new Panel
             {
@@ -75,6 +85,7 @@ namespace ProjectOLDR
             };
             avatar.Paint += (s, e) =>
             {
+                avatar.BackColor = MainUi.SurfaceHighlight;
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 using (GraphicsPath p = MainUi.GetRoundedPath(new Rectangle(0, 0, 39, 39), 20))
                 {
@@ -101,7 +112,7 @@ namespace ProjectOLDR
                 AutoSize = true
             };
 
-            Panel playersBadge = MainUi.CreateContainer(240, 14, 205, 36);
+            playersBadge = MainUi.CreateContainer(205, 14, 180, 36);
             onlinePlayersLabel = new Label
             {
                 Text = "Players in launcher: ...",
@@ -112,26 +123,34 @@ namespace ProjectOLDR
             };
             playersBadge.Controls.Add(onlinePlayersLabel);
 
-            friendsBtn = MainUi.CreateStyledButton("Friends", 460, 14, 110, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
-            friendsBtn.Click += (s, e) =>
+            themeBtn = MainUi.CreateStyledButton("Themes", 395, 14, 95, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            themeBtn.Click += (s, e) =>
             {
-                using (var f = new FriendsForm(currentUsername))
-                    f.ShowDialog(this);
+                using (ThemeForm form = new ThemeForm(this))
+                    form.ShowDialog(this);
             };
 
-            logoutBtn = MainUi.CreateStyledButton("Sign Out", 580, 14, 104, 36, Color.FromArgb(40, 20, 25), MainUi.Danger);
+            friendsBtn = MainUi.CreateStyledButton("Friends", 498, 14, 95, 36, MainUi.SurfaceHighlight, MainUi.BorderColor);
+            friendsBtn.Click += (s, e) =>
+            {
+                using (FriendsForm form = new FriendsForm(currentUsername))
+                    form.ShowDialog(this);
+            };
+
+            logoutBtn = MainUi.CreateStyledButton("Sign Out", 601, 14, 85, 36, Color.FromArgb(40, 20, 25), MainUi.Danger);
             logoutBtn.Click += async (s, e) => await SignOutAsync();
 
             topBar.Controls.Add(avatar);
             topBar.Controls.Add(userLabel);
             topBar.Controls.Add(dbStatusLabel);
             topBar.Controls.Add(playersBadge);
+            topBar.Controls.Add(themeBtn);
             topBar.Controls.Add(friendsBtn);
             topBar.Controls.Add(logoutBtn);
 
-            Panel heroCard = MainUi.CreateContainer(20, 132, 700, 326);
+            heroCard = MainUi.CreateContainer(20, 132, 700, 326);
 
-            Label gameTitle = new Label
+            gameTitle = new Label
             {
                 Text = "SECRET NEIGHBOR",
                 Font = new Font("Segoe UI", 22, FontStyle.Bold),
@@ -140,7 +159,7 @@ namespace ProjectOLDR
                 AutoSize = true
             };
 
-            Label gameInfo = new Label
+            gameInfo = new Label
             {
                 Text = "Direct Network Play • Build 2020",
                 Font = MainUi.Regular,
@@ -208,6 +227,26 @@ namespace ProjectOLDR
             this.Controls.Add(heroCard);
         }
 
+        private void ApplyThemeColors()
+        {
+            this.BackColor = MainUi.BgColor;
+            topBar.BackColor = MainUi.SurfaceColor;
+            heroCard.BackColor = MainUi.SurfaceColor;
+            playersBadge.BackColor = MainUi.SurfaceHighlight;
+
+            gameTitle.ForeColor = MainUi.TextPrimary;
+            gameInfo.ForeColor = MainUi.TextSecondary;
+            onlinePlayersLabel.ForeColor = MainUi.TextPrimary;
+
+            themeBtn.BackColor = MainUi.SurfaceHighlight;
+            friendsBtn.BackColor = MainUi.SurfaceHighlight;
+            updateBtn.BackColor = MainUi.SurfaceHighlight;
+
+            playBtn.BackColor = MainUi.Accent;
+
+            this.Invalidate(true);
+        }
+
         private void InitializePaths()
         {
             appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProjectOLDR");
@@ -265,6 +304,9 @@ namespace ProjectOLDR
 
         private async void GameLauncherForm_FormClosed(object sender, FormClosedEventArgs e)
         {
+            if (themeListener != null)
+                MainUi.OnThemeChanged -= themeListener;
+
             if (refreshTimer != null)
             {
                 refreshTimer.Stop();
