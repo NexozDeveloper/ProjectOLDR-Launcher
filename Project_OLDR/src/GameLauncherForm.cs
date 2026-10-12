@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json.Linq;
@@ -328,9 +327,23 @@ namespace ProjectOLDR
             try
             {
                 JObject obj = JObject.Parse(res.Data);
-                bool hasUpdate = (bool)obj["has_update"];
+                string tag = ((string)obj["tag"] ?? "").Trim();
+                string downloadUrl = (string)obj["url"];
 
-                if (!hasUpdate)
+                string cleanTag = tag.TrimStart('v', 'V').Trim();
+                string cleanCurrent = CurrentLauncherVersion.TrimStart('v', 'V').Trim();
+
+                bool isNewer = false;
+                if (Version.TryParse(cleanTag, out Version remoteVer) && Version.TryParse(cleanCurrent, out Version localVer))
+                {
+                    isNewer = remoteVer > localVer;
+                }
+                else
+                {
+                    isNewer = !string.Equals(cleanTag, cleanCurrent, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(cleanTag);
+                }
+
+                if (!isNewer || string.IsNullOrEmpty(downloadUrl))
                 {
                     if (File.Exists(deadlineFilePath)) File.Delete(deadlineFilePath);
                     updateBtn.Text = "Up to date ✓";
@@ -342,9 +355,6 @@ namespace ProjectOLDR
                     updateBtn.Enabled = true;
                     return;
                 }
-
-                string tag = (string)obj["tag"];
-                string downloadUrl = (string)obj["url"];
 
                 updateBtn.Text = "Update Ready !";
                 updateBtn.ForeColor = MainUi.Warning;
@@ -366,29 +376,13 @@ namespace ProjectOLDR
 
                 TimeSpan elapsed = DateTime.UtcNow - firstDetected;
                 bool isForced = elapsed.TotalDays >= 7;
+                int daysLeft = Math.Max(0, 7 - (int)elapsed.TotalDays);
 
-                if (isForced)
+                if (isForced || manualClick)
                 {
-                    MessageBox.Show(
-                        $"A mandatory update ({tag}) is required to continue playing. The 7-day grace period has expired.\n\nThe launcher will now update automatically.",
-                        "Mandatory Update Required",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-
-                    await PerformSelfUpdateAsync(downloadUrl);
-                }
-                else
-                {
-                    int daysLeft = Math.Max(1, 7 - (int)elapsed.TotalDays);
-                    var choice = MessageBox.Show(
-                        $"A new update ({tag}) is available!\n\nWould you like to install it automatically?\n(You have {daysLeft} day(s) left before this update becomes mandatory)",
-                        "Update Available",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Information);
-
-                    if (choice == DialogResult.Yes)
+                    using (UpdaterForm form = new UpdaterForm(tag, downloadUrl, isForced, daysLeft))
                     {
-                        await PerformSelfUpdateAsync(downloadUrl);
+                        form.ShowDialog(this);
                     }
                 }
             }
@@ -398,72 +392,6 @@ namespace ProjectOLDR
             }
 
             updateBtn.Enabled = true;
-        }
-
-        private async Task PerformSelfUpdateAsync(string downloadUrl)
-        {
-            statusLabel.Text = "Downloading update...";
-            statusLabel.ForeColor = MainUi.Warning;
-            playBtn.Enabled = false;
-            updateBtn.Enabled = false;
-            progressBar.Visible = true;
-            progressLabel.Visible = true;
-            progressBar.Value = 20;
-            progressLabel.Text = "Downloading binary...";
-
-            string currentExePath = Process.GetCurrentProcess().MainModule.FileName;
-            string tempDownloadedFile = Path.Combine(Path.GetTempPath(), "ProjectOLDR_new.exe");
-            string updaterScript = Path.Combine(Path.GetTempPath(), "oldr_updater.bat");
-
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    client.DefaultRequestHeaders.Add("User-Agent", "ProjectOLDR-AutoUpdater");
-                    byte[] data = await client.GetByteArrayAsync(downloadUrl);
-                    await File.WriteAllBytesAsync(tempDownloadedFile, data);
-                }
-
-                progressBar.Value = 80;
-                progressLabel.Text = "Applying update...";
-
-                string batchContent = $@"@echo off
-timeout /t 2 /nobreak > nul
-:retry
-del ""{currentExePath}"" > nul 2>&1
-if exist ""{currentExePath}"" (
-    timeout /t 1 /nobreak > nul
-    goto retry
-)
-move /y ""{tempDownloadedFile}"" ""{currentExePath}""
-start """" ""{currentExePath}""
-del ""%~f0""
-exit
-";
-                await File.WriteAllTextAsync(updaterScript, batchContent);
-
-                if (File.Exists(deadlineFilePath)) File.Delete(deadlineFilePath);
-
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = updaterScript,
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-                Process.Start(psi);
-
-                Application.Exit();
-            }
-            catch (Exception ex)
-            {
-                progressBar.Visible = false;
-                progressLabel.Visible = false;
-                statusLabel.Text = "Update failed.";
-                statusLabel.ForeColor = MainUi.Danger;
-                playBtn.Enabled = true;
-                updateBtn.Enabled = true;
-                MessageBox.Show(ex.Message, "Auto-Update Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
         }
 
         private async Task SignOutAsync()
