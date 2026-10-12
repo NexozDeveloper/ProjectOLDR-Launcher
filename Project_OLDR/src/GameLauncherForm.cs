@@ -35,7 +35,7 @@ namespace ProjectOLDR
         private string appDataPath = "";
         private string documentsPath = "";
         private string rarPath = "";
-        private string deadlineFilePath = "";
+        private string updatedFlagPath = "";
         private string currentUsername;
         private System.Windows.Forms.Timer refreshTimer;
         private Action themeListener;
@@ -61,8 +61,8 @@ namespace ProjectOLDR
             this.Shown += async (s, e) =>
             {
                 ApplyThemeColors();
+                CheckIfJustUpdated();
                 await InitializeDashboardAsync();
-                await CheckUpdatesWorkflowAsync(false);
             };
             this.FormClosed += GameLauncherForm_FormClosed;
         }
@@ -209,7 +209,7 @@ namespace ProjectOLDR
 
             updateBtn = MainUi.CreateStyledButton("Check Updates", 306, 313, 175, 46, MainUi.SurfaceHighlight, MainUi.BorderColor);
             updateBtn.Font = MainUi.HeaderMedium;
-            updateBtn.Click += async (s, e) => await CheckUpdatesWorkflowAsync(true);
+            updateBtn.Click += async (s, e) => await CheckUpdatesManualAsync();
 
             statusLabel = new Label
             {
@@ -243,6 +243,26 @@ namespace ProjectOLDR
             this.Controls.Add(heroCard);
         }
 
+        private void CheckIfJustUpdated()
+        {
+            if (File.Exists(updatedFlagPath))
+            {
+                try
+                {
+                    string installedVersion = File.ReadAllText(updatedFlagPath).Trim();
+                    File.Delete(updatedFlagPath);
+                    MessageBox.Show(
+                        $"You are updated to version {installedVersion}!",
+                        "Project OLDR",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+                catch
+                {
+                }
+            }
+        }
+
         private void ApplyThemeColors()
         {
             this.BackColor = MainUi.BgColor;
@@ -269,7 +289,7 @@ namespace ProjectOLDR
             documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             gamePath = Path.Combine(appDataPath, "Secret Neighbour.exe");
             rarPath = Path.Combine(documentsPath, "game.rar");
-            deadlineFilePath = Path.Combine(appDataPath, "update_deadline.dat");
+            updatedFlagPath = Path.Combine(appDataPath, "just_updated.dat");
 
             Directory.CreateDirectory(appDataPath);
         }
@@ -307,7 +327,7 @@ namespace ProjectOLDR
             }
         }
 
-        private async Task CheckUpdatesWorkflowAsync(bool manualClick)
+        private async Task CheckUpdatesManualAsync()
         {
             updateBtn.Enabled = false;
             updateBtn.Text = "Checking...";
@@ -315,12 +335,9 @@ namespace ProjectOLDR
             var res = await SupabaseApi.CheckGitHubUpdateAsync(CurrentLauncherVersion);
             if (!res.Success)
             {
+                MessageBox.Show(res.Message, "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 updateBtn.Text = "Check Updates";
                 updateBtn.Enabled = true;
-                if (manualClick)
-                {
-                    MessageBox.Show(res.Message, "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
                 return;
             }
 
@@ -338,60 +355,69 @@ namespace ProjectOLDR
                 {
                     isNewer = remoteVer > localVer;
                 }
-                else
-                {
-                    isNewer = !string.Equals(cleanTag, cleanCurrent, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(cleanTag);
-                }
 
                 if (!isNewer || string.IsNullOrEmpty(downloadUrl))
                 {
-                    if (File.Exists(deadlineFilePath)) File.Delete(deadlineFilePath);
-                    updateBtn.Text = "Up to date ✓";
-                    updateBtn.ForeColor = MainUi.Accent;
-                    if (manualClick)
-                    {
-                        MessageBox.Show("Your client is completely up to date.", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
+                    MessageBox.Show("You are fully updated.", "Project OLDR", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    updateBtn.Text = "Check Updates";
                     updateBtn.Enabled = true;
                     return;
                 }
 
-                updateBtn.Text = "Update Ready !";
-                updateBtn.ForeColor = MainUi.Warning;
+                var choice = MessageBox.Show(
+                    $"A new update ({tag}) is available!\n\nDo you want to install it now?",
+                    "Update Found",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
 
-                DateTime firstDetected = DateTime.UtcNow;
-                if (File.Exists(deadlineFilePath))
+                if (choice == DialogResult.Yes)
                 {
-                    string rawDate = File.ReadAllText(deadlineFilePath).Trim();
-                    if (!DateTime.TryParse(rawDate, out firstDetected))
-                    {
-                        firstDetected = DateTime.UtcNow;
-                        File.WriteAllText(deadlineFilePath, firstDetected.ToString("o"));
-                    }
-                }
-                else
-                {
-                    File.WriteAllText(deadlineFilePath, firstDetected.ToString("o"));
-                }
-
-                TimeSpan elapsed = DateTime.UtcNow - firstDetected;
-                bool isForced = elapsed.TotalDays >= 7;
-                int daysLeft = Math.Max(0, 7 - (int)elapsed.TotalDays);
-
-                if (isForced || manualClick)
-                {
-                    using (UpdaterForm form = new UpdaterForm(tag, downloadUrl, isForced, daysLeft))
-                    {
-                        form.ShowDialog(this);
-                    }
+                    PerformInAppUpdate(downloadUrl, tag);
+                    return;
                 }
             }
             catch
             {
-                updateBtn.Text = "Check Updates";
+                MessageBox.Show("Could not verify remote release version.", "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
+            updateBtn.Text = "Check Updates";
             updateBtn.Enabled = true;
+        }
+
+        private void PerformInAppUpdate(string downloadUrl, string newTag)
+        {
+            string updaterPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ProjectOLDRUpdater.exe");
+            string currentExePath = Environment.ProcessPath;
+
+            if (!File.Exists(updaterPath))
+            {
+                MessageBox.Show("ProjectOLDRUpdater.exe was not found in the application directory.", "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                updateBtn.Enabled = true;
+                updateBtn.Text = "Check Updates";
+                return;
+            }
+
+            try
+            {
+                File.WriteAllText(updatedFlagPath, newTag);
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = updaterPath,
+                    Arguments = $"\"{downloadUrl}\" \"{currentExePath}\"",
+                    UseShellExecute = true
+                };
+
+                Process.Start(psi);
+                Environment.Exit(0);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not launch updater: {ex.Message}", "Update Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                updateBtn.Enabled = true;
+                updateBtn.Text = "Check Updates";
+            }
         }
 
         private async Task SignOutAsync()
@@ -403,7 +429,7 @@ namespace ProjectOLDR
             }
 
             await SupabaseApi.RemovePresenceAsync(currentUsername);
-            this.Close();
+            Environment.Exit(0);
         }
 
         private async void GameLauncherForm_FormClosed(object sender, FormClosedEventArgs e)
@@ -427,6 +453,8 @@ namespace ProjectOLDR
             catch
             {
             }
+
+            Environment.Exit(0);
         }
 
         private void CheckAndExtractGame()
@@ -443,11 +471,6 @@ namespace ProjectOLDR
             {
                 statusLabel.Text = "Place game.rar in your Documents folder.";
                 statusLabel.ForeColor = MainUi.Danger;
-                MessageBox.Show(
-                    "Place game.rar inside your Documents folder:\n" + rarPath,
-                    "Archive Missing",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
                 return;
             }
 
@@ -492,11 +515,10 @@ namespace ProjectOLDR
                     statusLabel.ForeColor = MainUi.Danger;
                 }
             }
-            catch (Exception ex)
+            catch
             {
                 statusLabel.Text = "Extraction error.";
                 statusLabel.ForeColor = MainUi.Danger;
-                MessageBox.Show(ex.Message, "Extraction Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -603,7 +625,6 @@ namespace ProjectOLDR
             {
                 statusLabel.Text = "Launch failed.";
                 statusLabel.ForeColor = MainUi.Danger;
-                MessageBox.Show(ex.Message, "Launch Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 playBtn.Enabled = true;
             }
         }
