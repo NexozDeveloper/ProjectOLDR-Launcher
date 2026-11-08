@@ -1,0 +1,31 @@
+name: Build and Sign Executable
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-sign:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Publish application
+      run: dotnet publish -c Release -o ./publish
+
+    - name: Sign artifact via SignPath
+      uses: SignPath/signpath-github-action@v1
+      with:
+        connectorId: 'SignPath.GitHub'
+        organizationId: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+        projectId: ${{ secrets.SIGNPATH_PROJECT_ID }}
+        signingPolicySlug: 'release-signing'
+        artifactPath: './publish/ProjectOLDR.exe'
+        apiToken: ${{ secrets.SIGNPATH_API_TOKEN }}
