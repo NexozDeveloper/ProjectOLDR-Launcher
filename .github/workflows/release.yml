@@ -1,0 +1,54 @@
+name: Release & Sign
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build & Publish
+        run: |
+          dotnet publish Project_OLDR/Project_OLDR.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained false `
+            -p:PublishSingleFile=true `
+            -o ./publish
+
+      - name: Upload artifact for signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-exe
+          path: ./publish/ProjectOLDR.exe
+
+      - name: Sign with SignPath
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+          project-slug: 'projectoldr-launcher'
+          signing-policy-slug: 'release-signing'
+          artifact-configuration-slug: 'exe'
+          github-artifact-id: unsigned-exe
+          wait-for-completion: true
+          output-artifact-directory: ./signed
+
+      - name: Upload signed .exe to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./signed/ProjectOLDR.exe
