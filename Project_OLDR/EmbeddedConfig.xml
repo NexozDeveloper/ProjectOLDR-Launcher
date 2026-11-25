@@ -1,9 +1,9 @@
 <!-- Hided the DB and the Admin Password, and the Server.  -->
 <?xml version="1.0" encoding="utf-8" ?>
 <configuration>
-	<appSettings>
-		<add key="AdminPassword" value="Your_AdminPassword_Here" />
-		<add key="SupabaseUrl" value="Your_SupabaseUrl_Here" />
-		<add key="SupabaseKey" value="Your_SupabaseKey_here" />
-	</appSettings>
+  <appSettings>
+    <add key="SupabaseUrl" value="Your_Supabase_Url" />
+    <add key="SupabaseKey" value="Your_Supabase_Publish_key" />
+    <add key="AdminUsernames" value="Nexoz;ryze" />
+  </appSettings>
 </configuration>
