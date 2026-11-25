@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json.Linq;
@@ -10,311 +12,341 @@ namespace ProjectOLDR
 {
     public class FriendsForm : Form
     {
-        private string currentUsername;
-        private ListBox friendsListBox;
-        private ListBox requestsListBox;
+        private readonly string currentUsername;
+        private FlowLayoutPanel friendsFlow;
+        private FlowLayoutPanel requestsFlow;
         private TextBox addFriendBox;
         private Button addFriendBtn;
-        private Button acceptBtn;
-        private Button declineBtn;
         private Label statusLabel;
+        private Label friendCountLabel;
+        private Label requestCountLabel;
         private System.Windows.Forms.Timer loopTimer;
+        private bool refreshing;
 
         public FriendsForm(string username)
         {
-            currentUsername = username;
+            currentUsername = (username ?? "").Trim();
             BuildUI();
 
-            this.Shown += async (s, e) =>
+            Shown += async (s, e) =>
             {
                 await RefreshAllAsync();
-                loopTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+                loopTimer = new System.Windows.Forms.Timer { Interval = 6000 };
                 loopTimer.Tick += async (ts, te) => await RefreshAllAsync();
                 loopTimer.Start();
+            };
+
+            FormClosed += (s, e) =>
+            {
+                if (loopTimer == null) return;
+                loopTimer.Stop();
+                loopTimer.Dispose();
             };
         }
 
         private void BuildUI()
         {
-            this.Text = "Social Hub";
-            this.Size = new Size(420, 560);
-            this.BackColor = MainUi.BgColor;
-            this.FormBorderStyle = FormBorderStyle.None;
-            this.StartPosition = FormStartPosition.CenterParent;
+            MainUi.SetupForm(this, "Project OLDR - Friends", new Size(520, 640));
+            Controls.Add(MainUi.CreateTitleBar(this, "Friends"));
 
-            this.Paint += (s, e) =>
+            Panel card = MainUi.CreateContainer(20, 68, 480, 520);
+
+            card.Controls.Add(MainUi.CreateLabel("FRIENDS", 16, 16, 180, 26, MainUi.HeaderMedium, MainUi.TextPrimary));
+            friendCountLabel = MainUi.CreateLabel("0", 360, 17, 104, 24, MainUi.Small, MainUi.TextMuted);
+            friendCountLabel.TextAlign = ContentAlignment.MiddleRight;
+            card.Controls.Add(friendCountLabel);
+
+            friendsFlow = new FlowLayoutPanel
             {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
-                using (GraphicsPath path = MainUi.GetRoundedPath(rect, 8))
-                using (Pen pen = new Pen(MainUi.BorderColor, 1.2f))
-                {
-                    this.Region = new Region(path);
-                    e.Graphics.DrawPath(pen, path);
-                }
+                Location = new Point(16, 48),
+                Size = new Size(448, 216),
+                BackColor = Color.Transparent,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
             };
+            card.Controls.Add(friendsFlow);
 
-            this.Controls.Add(MainUi.CreateTitleBar(this, "Friends Hub"));
+            Panel divider = new Panel { Location = new Point(16, 274), Size = new Size(448, 1), BackColor = MainUi.BorderColor };
+            card.Controls.Add(divider);
 
-            Panel card = MainUi.CreateContainer(20, 54, 380, 486);
+            card.Controls.Add(MainUi.CreateLabel("PENDING REQUESTS", 16, 290, 240, 20, MainUi.Small, MainUi.TextMuted));
+            requestCountLabel = MainUi.CreateLabel("0", 360, 290, 104, 20, MainUi.Small, MainUi.TextMuted);
+            requestCountLabel.TextAlign = ContentAlignment.MiddleRight;
+            card.Controls.Add(requestCountLabel);
 
-            Label friendsTitle = new Label
+            requestsFlow = new FlowLayoutPanel
             {
-                Text = "MY FRIENDS",
-                Font = MainUi.HeaderMedium,
-                ForeColor = MainUi.TextPrimary,
-                Location = new Point(16, 14),
-                AutoSize = true
+                Location = new Point(16, 316),
+                Size = new Size(448, 126),
+                BackColor = Color.Transparent,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
             };
+            card.Controls.Add(requestsFlow);
 
-            friendsListBox = new ListBox
-            {
-                Location = new Point(16, 42),
-                Size = new Size(348, 200),
-                BackColor = MainUi.SurfaceHighlight,
-                ForeColor = MainUi.TextPrimary,
-                BorderStyle = BorderStyle.None,
-                Font = MainUi.Regular,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 36
-            };
-            friendsListBox.DrawItem += FriendsListBox_DrawItem;
-
-            Label reqTitle = new Label
-            {
-                Text = "PENDING REQUESTS",
-                Font = MainUi.Small,
-                ForeColor = MainUi.TextSecondary,
-                Location = new Point(16, 254),
-                AutoSize = true
-            };
-
-            requestsListBox = new ListBox
-            {
-                Location = new Point(16, 276),
-                Size = new Size(180, 76),
-                BackColor = MainUi.SurfaceHighlight,
-                ForeColor = MainUi.TextPrimary,
-                BorderStyle = BorderStyle.None,
-                Font = MainUi.Regular
-            };
-
-            acceptBtn = MainUi.CreateStyledButton("Accept", 204, 276, 76, 76, MainUi.Accent, MainUi.AccentHover);
-            acceptBtn.Click += async (s, e) => await AcceptSelectedRequestAsync();
-
-            declineBtn = MainUi.CreateStyledButton("Decline", 286, 276, 76, 76, Color.FromArgb(40, 22, 28), MainUi.Danger);
-            declineBtn.Click += async (s, e) => await DeclineSelectedRequestAsync();
-
-            Label addTitle = new Label
-            {
-                Text = "SEND FRIEND INVITATION",
-                Font = MainUi.Small,
-                ForeColor = MainUi.TextSecondary,
-                Location = new Point(16, 366),
-                AutoSize = true
-            };
-
-            addFriendBox = MainUi.CreateStyledTextBox(16, 388, 244, 32);
-            addFriendBtn = MainUi.CreateStyledButton("Add", 268, 387, 96, 34, Color.FromArgb(35, 42, 60), MainUi.BorderColor);
-            addFriendBtn.Click += async (s, e) => await AddFriendClickAsync();
-
-            statusLabel = new Label
-            {
-                Text = "Synchronizing contacts...",
-                Font = MainUi.Small,
-                ForeColor = MainUi.TextMuted,
-                Location = new Point(16, 436),
-                Size = new Size(348, 36),
-                TextAlign = ContentAlignment.TopCenter
-            };
-
-            card.Controls.Add(friendsTitle);
-            card.Controls.Add(friendsListBox);
-            card.Controls.Add(reqTitle);
-            card.Controls.Add(requestsListBox);
-            card.Controls.Add(acceptBtn);
-            card.Controls.Add(declineBtn);
-            card.Controls.Add(addTitle);
+            card.Controls.Add(MainUi.CreateLabel("ADD A FRIEND", 16, 452, 240, 18, MainUi.Small, MainUi.TextMuted));
+            addFriendBox = MainUi.CreateStyledTextBox(16, 476, 314, 36);
             card.Controls.Add(addFriendBox);
+
+            addFriendBtn = MainUi.CreateButton("Add", FluentIcon.Plus, 338, 476, 126, 36, ButtonKind.Primary);
+            addFriendBtn.Click += AddFriendBtn_Click;
             card.Controls.Add(addFriendBtn);
+
+            statusLabel = MainUi.CreateLabel("Synchronizing contacts...", 16, 522, 448, 34, MainUi.Caption, MainUi.TextMuted);
+            statusLabel.TextAlign = ContentAlignment.MiddleCenter;
             card.Controls.Add(statusLabel);
 
-            this.Controls.Add(card);
-
-            this.FormClosed += (s, e) =>
-            {
-                if (loopTimer != null)
-                {
-                    loopTimer.Stop();
-                    loopTimer.Dispose();
-                }
-            };
-        }
-
-        private void FriendsListBox_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0) return;
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-            bool sel = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-            Color bg = sel ? MainUi.BorderColor : MainUi.SurfaceHighlight;
-            using (SolidBrush b = new SolidBrush(bg))
-                e.Graphics.FillRectangle(b, e.Bounds);
-
-            string item = friendsListBox.Items[e.Index].ToString();
-            bool isOnline = item.StartsWith("[ON]");
-            string cleanName = item.Substring(4).Trim();
-
-            Color dotColor = isOnline ? MainUi.Accent : MainUi.TextMuted;
-            using (SolidBrush dot = new SolidBrush(dotColor))
-                e.Graphics.FillEllipse(dot, e.Bounds.X + 12, e.Bounds.Y + 13, 10, 10);
-
-            using (SolidBrush t = new SolidBrush(MainUi.TextPrimary))
-                e.Graphics.DrawString(cleanName, MainUi.HeaderMedium, t, e.Bounds.X + 32, e.Bounds.Y + 7);
-
-            using (SolidBrush st = new SolidBrush(isOnline ? MainUi.Accent : MainUi.TextMuted))
-            {
-                string statusText = isOnline ? "ONLINE" : "OFFLINE";
-                e.Graphics.DrawString(statusText, MainUi.Small, st, e.Bounds.Right - 70, e.Bounds.Y + 9);
-            }
+            Controls.Add(card);
         }
 
         private async Task RefreshAllAsync()
         {
-            await SupabaseApi.UpdatePresenceAsync(currentUsername);
+            if (refreshing || IsDisposed) return;
+            refreshing = true;
 
-            var res = await SupabaseApi.GetFriendsDataAsync(currentUsername);
-            if (res.Success && !string.IsNullOrEmpty(res.Data))
+            try
             {
-                try
+                await SupabaseApi.UpdatePresenceAsync(currentUsername);
+
+                ApiResult result = await SupabaseApi.GetFriendsDataAsync(currentUsername);
+                if (!result.Success)
                 {
-                    JArray arr = JArray.Parse(res.Data);
+                    SetStatus("Could not load friends: " + result.Message, MainUi.Danger);
+                    return;
+                }
 
-                    friendsListBox.Items.Clear();
-                    requestsListBox.Items.Clear();
+                List<string> friendNames = new List<string>();
+                List<string> requestNames = new List<string>();
 
-                    int onlineCount = 0;
-                    foreach (var row in arr)
+                JArray rows = JArray.Parse(result.Data ?? "[]");
+                foreach (JObject row in rows.OfType<JObject>())
+                {
+                    string sender = (string)row["sender"] ?? "";
+                    string receiver = (string)row["receiver"] ?? "";
+                    string status = (string)row["status"] ?? "";
+
+                    if (status == "accepted")
                     {
-                        string s = (string)row["sender"];
-                        string r = (string)row["receiver"];
-                        string status = (string)row["status"];
-
-                        if (status == "accepted")
-                        {
-                            string friendName = s.Equals(currentUsername, StringComparison.OrdinalIgnoreCase) ? r : s;
-                            bool online = await SupabaseApi.IsUserOnlineAsync(friendName);
-                            if (online) onlineCount++;
-                            string prefix = online ? "[ON]" : "[OF]";
-                            friendsListBox.Items.Add($"{prefix} {friendName}");
-                        }
-                        else if (status == "pending" && r.Equals(currentUsername, StringComparison.OrdinalIgnoreCase))
-                        {
-                            requestsListBox.Items.Add(s);
-                        }
+                        string name = sender.Equals(currentUsername, StringComparison.OrdinalIgnoreCase) ? receiver : sender;
+                        if (name.Length > 0 && !friendNames.Contains(name)) friendNames.Add(name);
                     }
-
-                    statusLabel.Text = $"{friendsListBox.Items.Count} friends • {onlineCount} online";
-                    statusLabel.ForeColor = MainUi.TextMuted;
+                    else if (status == "pending" && receiver.Equals(currentUsername, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (sender.Length > 0 && !requestNames.Contains(sender)) requestNames.Add(sender);
+                    }
                 }
-                catch
+
+                Dictionary<string, LauncherProfile> profiles =
+                    await ProfileStore.GetProfilesAsync(friendNames.Concat(requestNames));
+                HashSet<string> online = await SupabaseApi.GetOnlineUsernamesAsync();
+
+                RenderFriends(friendNames, profiles, online);
+                RenderRequests(requestNames, profiles);
+
+                int onlineCount = friendNames.Count(name => online.Contains(name));
+                friendCountLabel.Text = friendNames.Count + " total";
+                requestCountLabel.Text = requestNames.Count + " pending";
+                SetStatus(friendNames.Count + " friends - " + onlineCount + " online", MainUi.TextMuted);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Could not refresh friends: " + ex.Message, MainUi.Danger);
+            }
+            finally
+            {
+                refreshing = false;
+            }
+        }
+
+        private void RenderFriends(List<string> names, Dictionary<string, LauncherProfile> profiles, HashSet<string> online)
+        {
+            ClearControls(friendsFlow.Controls);
+            if (names.Count == 0)
+            {
+                friendsFlow.Controls.Add(CreateEmptyRow("No accepted friends yet."));
+                return;
+            }
+
+            foreach (string name in names)
+            {
+                LauncherProfile profile = profiles.ContainsKey(name) ? profiles[name] : new LauncherProfile { Username = name };
+                friendsFlow.Controls.Add(CreateFriendRow(name, profile, online.Contains(name)));
+            }
+        }
+
+        private void RenderRequests(List<string> names, Dictionary<string, LauncherProfile> profiles)
+        {
+            ClearControls(requestsFlow.Controls);
+            if (names.Count == 0)
+            {
+                requestsFlow.Controls.Add(CreateEmptyRow("No pending requests."));
+                return;
+            }
+
+            foreach (string name in names)
+            {
+                LauncherProfile profile = profiles.ContainsKey(name) ? profiles[name] : new LauncherProfile { Username = name };
+                requestsFlow.Controls.Add(CreateRequestRow(name, profile));
+            }
+        }
+
+        private Panel CreateFriendRow(string username, LauncherProfile profile, bool online)
+        {
+            if (profile == null) profile = new LauncherProfile();
+            profile.Username = username;
+
+            Panel row = CreateRowPanel(46);
+            ProfileAvatar avatar = new ProfileAvatar(32) { Location = new Point(8, 7) };
+            avatar.SetProfile(profile);
+            row.Controls.Add(avatar);
+
+            row.Controls.Add(MainUi.CreateLabel(profile.DisplayLabel, 50, 5, 240, 22,
+                MainUi.BodyStrong, MainUi.TextPrimary));
+
+            string sub = profile.Bio == null ? "" : profile.Bio.Trim();
+            if (sub.Length == 0) sub = "@" + username;
+            if (sub.Length > 32) sub = sub.Substring(0, 32) + "...";
+            row.Controls.Add(MainUi.CreateLabel(sub, 50, 25, 268, 16, MainUi.Small, MainUi.TextMuted));
+
+            Label status = MainUi.CreateLabel(online ? "ONLINE" : "OFFLINE", 330, 14, 88, 18,
+                MainUi.Small, online ? MainUi.Accent : MainUi.TextMuted);
+            status.TextAlign = ContentAlignment.MiddleRight;
+            row.Controls.Add(status);
+
+            return row;
+        }
+
+        private Panel CreateRequestRow(string username, LauncherProfile profile)
+        {
+            if (profile == null) profile = new LauncherProfile();
+            profile.Username = username;
+
+            Panel row = CreateRowPanel(40);
+            ProfileAvatar avatar = new ProfileAvatar(28) { Location = new Point(8, 6) };
+            avatar.SetProfile(profile);
+            row.Controls.Add(avatar);
+
+            string label = profile.DisplayLabel;
+            if (!label.Equals(username, StringComparison.OrdinalIgnoreCase)) label += "  @" + username;
+            row.Controls.Add(MainUi.CreateLabel(label, 44, 8, 292, 24, MainUi.Regular, MainUi.TextPrimary));
+
+            Button accept = MainUi.CreateIconButton(FluentIcon.Check, 344, 6, 28, "Accept request");
+            accept.Click += async (s, e) => await AcceptRequestAsync(username);
+            row.Controls.Add(accept);
+
+            Button decline = MainUi.CreateIconButton(FluentIcon.Close, 386, 6, 28, "Decline request");
+            decline.Click += async (s, e) => await DeclineRequestAsync(username);
+            row.Controls.Add(decline);
+
+            return row;
+        }
+
+        private Panel CreateEmptyRow(string text)
+        {
+            Panel row = CreateRowPanel(40);
+            Label label = MainUi.CreateLabel(text, 14, 8, 404, 24, MainUi.Small, MainUi.TextMuted);
+            label.TextAlign = ContentAlignment.MiddleLeft;
+            row.Controls.Add(label);
+            return row;
+        }
+
+        private static Panel CreateRowPanel(int height)
+        {
+            Panel row = new Panel
+            {
+                Size = new Size(432, height),
+                Margin = new Padding(0, 0, 0, 6),
+                BackColor = MainUi.SurfaceColor
+            };
+
+            row.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle rect = new Rectangle(0, 0, row.Width - 1, row.Height - 1);
+                using (GraphicsPath path = MainUi.GetRoundedPath(rect, 7))
+                using (SolidBrush bg = new SolidBrush(MainUi.SurfaceColor))
                 {
+                    e.Graphics.FillPath(bg, path);
+                    using (Pen pen = new Pen(MainUi.BorderColor, 1f))
+                    {
+                        e.Graphics.DrawPath(pen, path);
+                    }
                 }
-            }
+            };
+
+            return row;
         }
 
-        private async Task AcceptSelectedRequestAsync()
+        private static void ClearControls(Control.ControlCollection controls)
         {
-            if (requestsListBox.SelectedIndex < 0)
+            while (controls.Count > 0)
             {
-                statusLabel.Text = "Select a pending request first.";
-                statusLabel.ForeColor = MainUi.Warning;
-                return;
+                Control control = controls[0];
+                controls.Remove(control);
+                control.Dispose();
             }
-
-            string target = requestsListBox.SelectedItem.ToString();
-            acceptBtn.Enabled = false;
-
-            var res = await SupabaseApi.AcceptFriendAsync(currentUsername, target);
-            if (res.Success)
-            {
-                statusLabel.Text = $"Accepted friend request from {target}!";
-                statusLabel.ForeColor = MainUi.Accent;
-                await RefreshAllAsync();
-            }
-            else
-            {
-                statusLabel.Text = res.Message;
-                statusLabel.ForeColor = MainUi.Danger;
-            }
-
-            acceptBtn.Enabled = true;
         }
 
-        private async Task DeclineSelectedRequestAsync()
+        private async Task AcceptRequestAsync(string sender)
         {
-            if (requestsListBox.SelectedIndex < 0)
-            {
-                statusLabel.Text = "Select a pending request first.";
-                statusLabel.ForeColor = MainUi.Warning;
-                return;
-            }
-
-            string target = requestsListBox.SelectedItem.ToString();
-            declineBtn.Enabled = false;
-
-            var res = await SupabaseApi.DeclineFriendAsync(currentUsername, target);
-            if (res.Success)
-            {
-                statusLabel.Text = $"Declined friend request from {target}.";
-                statusLabel.ForeColor = MainUi.TextMuted;
-                await RefreshAllAsync();
-            }
-            else
-            {
-                statusLabel.Text = res.Message;
-                statusLabel.ForeColor = MainUi.Danger;
-            }
-
-            declineBtn.Enabled = true;
+            SetStatus("Accepting request...", MainUi.TextMuted);
+            ApiResult result = await SupabaseApi.AcceptFriendAsync(currentUsername, sender);
+            SetStatus(result.Success ? "Friend request accepted." : result.Message, result.Success ? MainUi.Accent : MainUi.Danger);
+            if (result.Success) await RefreshAllAsync();
         }
 
-        private async Task AddFriendClickAsync()
+        private async Task DeclineRequestAsync(string sender)
+        {
+            SetStatus("Declining request...", MainUi.TextMuted);
+            ApiResult result = await SupabaseApi.DeclineFriendAsync(currentUsername, sender);
+            SetStatus(result.Success ? "Friend request declined." : result.Message, result.Success ? MainUi.TextMuted : MainUi.Danger);
+            if (result.Success) await RefreshAllAsync();
+        }
+
+        private async void AddFriendBtn_Click(object sender, EventArgs e)
         {
             string target = addFriendBox.Text.Trim();
-            if (string.IsNullOrEmpty(target))
+            if (target.Length == 0)
             {
-                statusLabel.Text = "Please enter a valid player username.";
-                statusLabel.ForeColor = MainUi.Warning;
+                SetStatus("Enter a player username.", MainUi.Warning);
                 return;
             }
 
             if (target.Equals(currentUsername, StringComparison.OrdinalIgnoreCase))
             {
-                statusLabel.Text = "You cannot add yourself as a friend.";
-                statusLabel.ForeColor = MainUi.Warning;
+                SetStatus("You cannot add yourself as a friend.", MainUi.Warning);
                 return;
             }
 
             addFriendBtn.Enabled = false;
-            statusLabel.Text = "Sending request...";
-            statusLabel.ForeColor = MainUi.TextMuted;
+            SetStatus("Sending request...", MainUi.TextMuted);
 
-            var res = await SupabaseApi.AddFriendAsync(currentUsername, target);
-            if (res.Success)
+            ApiResult result = await SupabaseApi.AddFriendAsync(currentUsername, target);
+            addFriendBtn.Enabled = true;
+
+            if (result.Success)
             {
                 addFriendBox.Clear();
-                statusLabel.Text = $"Request successfully sent to {target}!";
-                statusLabel.ForeColor = MainUi.Accent;
+                SetStatus("Request sent to " + target + ".", MainUi.Accent);
                 await RefreshAllAsync();
             }
             else
             {
-                statusLabel.Text = res.Message;
-                statusLabel.ForeColor = MainUi.Danger;
+                SetStatus(result.Message, MainUi.Danger);
             }
+        }
 
-            addFriendBtn.Enabled = true;
+        private void SetStatus(string text, Color color)
+        {
+            if (statusLabel == null || statusLabel.IsDisposed) return;
+            statusLabel.Text = text;
+            statusLabel.ForeColor = color;
         }
     }
 }
