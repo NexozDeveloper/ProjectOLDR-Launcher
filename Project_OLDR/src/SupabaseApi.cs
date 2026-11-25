@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -70,6 +72,76 @@ namespace ProjectOLDR
             };
 
             return await CallRpcAsync("authenticate_launcher_user", payload);
+        }
+
+        public static async Task<ApiResult> ValidateAdminAsync(string username, string password)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+                return ApiResult.Fail("Credentials required.");
+
+            return await CallRpcAsync("authenticate_launcher_user", new
+            {
+                p_username = username.Trim(),
+                p_password = password
+            });
+        }
+
+        public static async Task<VersionFetchResult> GetVersionsAsync()
+        {
+            try
+            {
+                string url = "rest/v1/launcher_versions?select=*&is_active=eq.true&order=sort_order.asc,created_at.asc";
+                using (HttpResponseMessage response = await Client.GetAsync(url))
+                {
+                    string body = await response.Content.ReadAsStringAsync();
+                    if (response.IsSuccessStatusCode)
+                    {
+                        List<GameVersion> versions = JsonConvert.DeserializeObject<List<GameVersion>>(body) ?? new List<GameVersion>();
+                        return VersionFetchResult.Ok(versions);
+                    }
+
+                    bool setup = body.IndexOf("PGRST205", StringComparison.OrdinalIgnoreCase) >= 0;
+                    return VersionFetchResult.Fail(ParseError(body, (int)response.StatusCode), setup);
+                }
+            }
+            catch (HttpRequestException)
+            {
+                return VersionFetchResult.Fail("Connection failed. Check your network.");
+            }
+            catch (Exception ex)
+            {
+                return VersionFetchResult.Fail("Could not load versions: " + ex.Message);
+            }
+        }
+
+        public static async Task<ApiResult> SaveVersionAsync(AdminSession session, GameVersion version)
+        {
+            string id = string.IsNullOrWhiteSpace(version.Id) ? null : version.Id.Trim();
+            return await CallRpcAsync("admin_save_version", new
+            {
+                p_username = session.Username,
+                p_password = session.Password,
+                p_id = id,
+                p_name = version.Name.Trim(),
+                p_version_tag = version.VersionTag.Trim(),
+                p_download_url = version.DownloadUrl.Trim(),
+                p_file_name = version.FileName == null ? "" : version.FileName.Trim(),
+                p_archive_password = version.ArchivePassword == null ? "" : version.ArchivePassword.Trim(),
+                p_notes = version.Notes == null ? "" : version.Notes.Trim(),
+                p_color_accent = string.IsNullOrWhiteSpace(version.ColorAccent) ? "#FFFFFF" : version.ColorAccent.Trim(),
+                p_is_active = version.IsActive,
+                p_sort_order = version.SortOrder
+            });
+        }
+
+        public static async Task<ApiResult> DeleteVersionAsync(AdminSession session, string id)
+        {
+            return await CallRpcAsync("admin_delete_version", new
+            {
+                p_username = session.Username,
+                p_password = session.Password,
+                p_id = id
+            });
         }
 
         public static async Task<ApiResult> CheckDatabaseHealthAsync()
@@ -174,6 +246,53 @@ namespace ProjectOLDR
             return 1;
         }
 
+        public static Task<ApiResult> JoinGameSessionAsync(string username, string password, string versionId)
+        {
+            return CallRpcAsync("launcher_join_game", new
+            {
+                p_username = username == null ? "" : username.Trim(),
+                p_password = password ?? "",
+                p_version_id = versionId ?? ""
+            });
+        }
+
+        public static Task<ApiResult> LeaveGameSessionAsync(string username, string password, string versionId)
+        {
+            return CallRpcAsync("launcher_leave_game", new
+            {
+                p_username = username == null ? "" : username.Trim(),
+                p_password = password ?? "",
+                p_version_id = versionId ?? ""
+            });
+        }
+
+        public static async Task<Dictionary<string, int>> GetGamePlayerCountsAsync()
+        {
+            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string threshold = DateTime.UtcNow.AddSeconds(-25).ToString("yyyy-MM-ddTHH:mm:ssZ");
+                string url = $"rest/v1/launcher_game_sessions?select=version_id&last_seen=gte.{Uri.EscapeDataString(threshold)}";
+                using (var response = await Client.GetAsync(url))
+                {
+                    if (!response.IsSuccessStatusCode) return counts;
+                    string body = await response.Content.ReadAsStringAsync();
+                    JArray rows = JArray.Parse(body);
+                    foreach (JObject row in rows.OfType<JObject>())
+                    {
+                        string id = (string)row["version_id"];
+                        if (string.IsNullOrWhiteSpace(id)) continue;
+                        id = id.Trim();
+                        counts[id] = counts.ContainsKey(id) ? counts[id] + 1 : 1;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return counts;
+        }
+
         public static async Task<bool> IsUserOnlineAsync(string username)
         {
             try
@@ -198,22 +317,43 @@ namespace ProjectOLDR
 
         public static async Task<bool> UserExistsAsync(string username)
         {
+            string clean = username == null ? "" : username.Trim();
+            if (clean.Length == 0) return false;
+
             try
             {
-                string url = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(username)}";
-                using (var response = await Client.GetAsync(url))
+                string profileUrl = $"rest/v1/launcher_profiles?select=username&username=eq.{Uri.EscapeDataString(clean.ToLowerInvariant())}";
+                using (var response = await Client.GetAsync(profileUrl))
                 {
                     if (response.IsSuccessStatusCode)
                     {
                         string body = await response.Content.ReadAsStringAsync();
                         JArray arr = JArray.Parse(body);
-                        return arr.Count > 0;
+                        if (arr.Count > 0) return true;
                     }
                 }
             }
             catch
             {
             }
+
+            try
+            {
+                string presenceUrl = $"rest/v1/user_presence?username=eq.{Uri.EscapeDataString(clean)}";
+                using (var response = await Client.GetAsync(presenceUrl))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        JArray arr = JArray.Parse(body);
+                        if (arr.Count > 0) return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
             return true;
         }
 
@@ -328,6 +468,80 @@ namespace ProjectOLDR
                 return ApiResult.Fail(ex.Message);
             }
             return ApiResult.Fail("Failed to fetch friends data.");
+        }
+
+        public static async Task<HashSet<string>> GetOnlineUsernamesAsync()
+        {
+            HashSet<string> result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string threshold = DateTime.UtcNow.AddSeconds(-12).ToString("yyyy-MM-ddTHH:mm:ssZ");
+                string url = $"rest/v1/user_presence?select=username&last_seen=gte.{Uri.EscapeDataString(threshold)}";
+                using (var response = await Client.GetAsync(url))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string body = await response.Content.ReadAsStringAsync();
+                        JArray arr = JArray.Parse(body);
+                        foreach (JObject row in arr.OfType<JObject>())
+                        {
+                            string name = (string)row["username"];
+                            if (!string.IsNullOrWhiteSpace(name)) result.Add(name.Trim());
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return result;
+        }
+
+        public static async Task<ApiResult> GetProfileAsync(string username)
+        {
+            return await GetProfilesAsync(new string[] { username });
+        }
+
+        public static async Task<ApiResult> GetProfilesAsync(IEnumerable<string> usernames)
+        {
+            try
+            {
+                List<string> names = new List<string>();
+                foreach (string username in usernames)
+                {
+                    string clean = username == null ? "" : username.Trim();
+                    if (clean.Length > 0 && !names.Contains(clean)) names.Add(clean);
+                }
+                if (names.Count == 0) return ApiResult.Ok("Success", "[]");
+
+                List<string> escaped = new List<string>();
+                foreach (string name in names) escaped.Add(Uri.EscapeDataString(name.ToLowerInvariant()));
+                string url = "rest/v1/launcher_profiles?select=username,display_name,bio,avatar_data&username=in.(" +
+                    string.Join(",", escaped) + ")";
+
+                using (var response = await Client.GetAsync(url))
+                {
+                    string body = await response.Content.ReadAsStringAsync();
+                    if (response.IsSuccessStatusCode) return ApiResult.Ok("Success", body);
+                    return ApiResult.Fail(ParseError(body, (int)response.StatusCode));
+                }
+            }
+            catch (Exception ex)
+            {
+                return ApiResult.Fail(ex.Message);
+            }
+        }
+
+        public static Task<ApiResult> SaveProfileAsync(string username, string password, string displayName, string bio, string avatarData)
+        {
+            return CallRpcAsync("save_launcher_profile", new
+            {
+                p_username = username == null ? "" : username.Trim(),
+                p_password = password ?? "",
+                p_display_name = displayName ?? "",
+                p_bio = bio ?? "",
+                p_avatar_data = avatarData ?? ""
+            });
         }
 
         public static async Task<ApiResult> CheckGitHubUpdateAsync(string currentVersionStr)
