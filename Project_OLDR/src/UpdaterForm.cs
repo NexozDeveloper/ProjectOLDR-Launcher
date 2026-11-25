@@ -33,27 +33,10 @@ namespace ProjectOLDR
 
         private void BuildUI()
         {
-            this.Text = "Project OLDR - Update Manager";
-            this.Size = new Size(540, 310);
-            this.BackColor = MainUi.BgColor;
-            this.FormBorderStyle = FormBorderStyle.None;
-            this.StartPosition = FormStartPosition.CenterParent;
-
-            this.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
-                using (GraphicsPath path = MainUi.GetRoundedPath(rect, 8))
-                using (Pen pen = new Pen(MainUi.BorderColor, 1.2f))
-                {
-                    this.Region = new Region(path);
-                    e.Graphics.DrawPath(pen, path);
-                }
-            };
-
+            MainUi.SetupForm(this, "Project OLDR - Update Manager", new Size(600, 400));
             this.Controls.Add(MainUi.CreateTitleBar(this, "Client Update Available"));
 
-            Panel card = MainUi.CreateContainer(20, 54, 500, 236);
+            Panel card = MainUi.CreateContainer(20, 68, 560, 272);
 
             titleLabel = new Label
             {
