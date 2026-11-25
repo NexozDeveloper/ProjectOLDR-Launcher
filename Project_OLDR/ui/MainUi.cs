@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
@@ -26,338 +27,265 @@ namespace ProjectOLDR.UI
         Custom
     }
 
+    public enum ButtonKind
+    {
+        Primary,
+        Secondary,
+        Danger,
+        Subtle
+    }
+
     public static class IconRenderer
     {
         public static void DrawUser(Graphics g, Rectangle r, Color color)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (SolidBrush brush = new SolidBrush(color))
-            {
-                int headSize = r.Width / 2;
-                g.FillEllipse(brush, r.X + (r.Width - headSize) / 2, r.Y, headSize, headSize);
-
-                int bodyY = r.Y + headSize + 2;
-                int bodyHeight = r.Height - headSize - 2;
-                using (GraphicsPath path = new GraphicsPath())
-                {
-                    path.AddArc(r.X, bodyY, r.Width, bodyHeight * 2, 180, 180);
-                    path.CloseFigure();
-                    g.FillPath(brush, path);
-                }
-            }
+            FluentIcons.Draw(g, FluentIcon.Person, r, color, 1.15f);
         }
 
         public static void DrawGamepad(Graphics g, Rectangle r, Color color)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (Pen pen = new Pen(color, 2f))
-            using (SolidBrush brush = new SolidBrush(color))
-            {
-                Rectangle body = new Rectangle(r.X + 2, r.Y + 3, r.Width - 4, r.Height - 6);
-                using (GraphicsPath path = MainUi.GetRoundedPath(body, 4))
-                    g.DrawPath(pen, path);
-
-                g.FillRectangle(brush, r.X + 6, r.Y + r.Height / 2 - 1, 6, 2);
-                g.FillRectangle(brush, r.X + 8, r.Y + r.Height / 2 - 3, 2, 6);
-
-                g.FillEllipse(brush, r.Right - 11, r.Y + r.Height / 2 - 2, 3, 3);
-                g.FillEllipse(brush, r.Right - 7, r.Y + r.Height / 2 - 2, 3, 3);
-            }
+            FluentIcons.Draw(g, FluentIcon.Gamepad, r, color, 1.15f);
         }
 
         public static void DrawPaintBrush(Graphics g, Rectangle r, Color tipColor)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            using (Matrix m = new Matrix())
-            {
-                PointF center = new PointF(r.X + r.Width / 2f, r.Y + r.Height / 2f);
-                m.RotateAt(-45, center);
-                g.Transform = m;
-
-                int cx = (int)center.X;
-                int cy = (int)center.Y;
-
-                using (SolidBrush handleBrush = new SolidBrush(Color.FromArgb(175, 140, 105)))
-                {
-                    Point[] handle = new Point[]
-                    {
-                        new Point(cx - 3, cy + 2),
-                        new Point(cx + 3, cy + 2),
-                        new Point(cx + 1, cy + 16),
-                        new Point(cx - 1, cy + 16)
-                    };
-                    g.FillPolygon(handleBrush, handle);
-                }
-
-                using (SolidBrush ferruleBrush = new SolidBrush(Color.FromArgb(200, 205, 215)))
-                {
-                    g.FillRectangle(ferruleBrush, cx - 4, cy - 4, 8, 6);
-                }
-
-                using (SolidBrush bristleBrush = new SolidBrush(tipColor))
-                {
-                    Point[] bristles = new Point[]
-                    {
-                        new Point(cx - 4, cy - 4),
-                        new Point(cx + 4, cy - 4),
-                        new Point(cx + 2, cy - 13),
-                        new Point(cx, cy - 15),
-                        new Point(cx - 2, cy - 13)
-                    };
-                    g.FillPolygon(bristleBrush, bristles);
-                }
-
-                g.ResetTransform();
-            }
+            FluentIcons.Draw(g, FluentIcon.Palette, r, tipColor, 1.15f);
         }
     }
 
     public static class MainUi
     {
+        private sealed class ButtonRole
+        {
+            public ButtonKind Kind;
+            public FluentIcon? Icon;
+        }
+
+        public const int IconSize = 14;
+
         public static LauncherTheme CurrentTheme { get; private set; } = LauncherTheme.DefaultDark;
 
-        public static Color BgColor { get; private set; } = Color.FromArgb(10, 12, 16);
-        public static Color SurfaceColor { get; private set; } = Color.FromArgb(17, 20, 28);
-        public static Color SurfaceHighlight { get; private set; } = Color.FromArgb(26, 31, 44);
-        public static Color BorderColor { get; private set; } = Color.FromArgb(38, 44, 62);
+        public static Color BgColor { get; private set; } = Color.FromArgb(10, 10, 10);
+        public static Color SurfaceColor { get; private set; } = Color.FromArgb(20, 20, 20);
+        public static Color SurfaceHighlight { get; private set; } = Color.FromArgb(28, 28, 28);
+        public static Color BorderColor { get; private set; } = Color.FromArgb(42, 42, 42);
 
-        public static Color Accent { get; private set; } = Color.FromArgb(0, 230, 153);
-        public static Color AccentHover { get; private set; } = Color.FromArgb(0, 255, 170);
-        public static Color Danger { get; private set; } = Color.FromArgb(255, 77, 77);
-        public static Color Warning { get; private set; } = Color.FromArgb(255, 179, 25);
+        public static Color Accent { get; private set; } = Color.FromArgb(255, 255, 255);
+        public static Color AccentHover { get; private set; } = Color.FromArgb(230, 230, 230);
+        public static Color Danger { get; private set; } = Color.FromArgb(154, 154, 154);
+        public static Color Warning { get; private set; } = Color.FromArgb(176, 176, 176);
+        public static readonly Color Success = Color.FromArgb(74, 222, 128);
 
-        public static Color TextPrimary { get; private set; } = Color.FromArgb(245, 247, 250);
-        public static Color TextSecondary { get; private set; } = Color.FromArgb(130, 140, 160);
-        public static Color TextMuted { get; private set; } = Color.FromArgb(85, 95, 115);
+        public static Color TextPrimary { get; private set; } = Color.FromArgb(255, 255, 255);
+        public static Color TextSecondary { get; private set; } = Color.FromArgb(184, 184, 184);
+        public static Color TextMuted { get; private set; } = Color.FromArgb(124, 124, 124);
 
-        public static Color CustomColorValue { get; private set; } = Color.FromArgb(0, 230, 153);
+        public static Color CustomColorValue { get; private set; } = Color.FromArgb(255, 255, 255);
 
-        public static readonly Font HeaderLarge = new Font("Segoe UI", 16, FontStyle.Bold);
-        public static readonly Font HeaderMedium = new Font("Segoe UI", 11, FontStyle.Bold);
-        public static readonly Font Regular = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-        public static readonly Font Small = new Font("Segoe UI", 8.5f, FontStyle.Regular);
+        public static readonly Font Display = new Font("Segoe UI Variable Display", 28, FontStyle.Bold);
+        public static readonly Font HeaderLarge = new Font("Segoe UI Variable Display", 22, FontStyle.Bold);
+        public static readonly Font HeaderMedium = new Font("Segoe UI Variable Text", 13, FontStyle.Bold);
+        public static readonly Font BodyStrong = new Font("Segoe UI Variable Text", 12, FontStyle.Bold);
+        public static readonly Font Caption = new Font("Segoe UI Variable Text", 12, FontStyle.Regular);
+        public static readonly Font Regular = new Font("Segoe UI Variable Text", 11, FontStyle.Regular);
+        public static readonly Font Small = new Font("Segoe UI Variable Text", 10, FontStyle.Regular);
 
         public static event Action OnThemeChanged;
         public static event Action OnRainbowTick;
 
-        private static Timer rainbowTimer;
-        private static float rainbowHue = 0f;
+        private static readonly Timer rainbowTimer;
+        private static readonly Dictionary<Button, ButtonRole> buttonRoles = new Dictionary<Button, ButtonRole>();
 
         private static string ThemeSavePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProjectOLDR", "theme.dat");
 
         static MainUi()
         {
-            rainbowTimer = new Timer { Interval = 60 };
+            rainbowTimer = new Timer { Interval = 120 };
             rainbowTimer.Tick += (s, e) =>
             {
-                if (CurrentTheme == LauncherTheme.Rainbow)
+                if (CurrentTheme != LauncherTheme.Rainbow) return;
+                OnRainbowTick?.Invoke();
+            };
+            LoadSavedTheme();
+        }
+
+        public static void SetupForm(Form form, string title, Size size)
+        {
+            form.Text = title;
+            form.Size = size;
+            form.StartPosition = FormStartPosition.CenterScreen;
+            form.FormBorderStyle = FormBorderStyle.None;
+            form.BackColor = BgColor;
+            form.KeyPreview = true;
+            form.ShowInTaskbar = true;
+
+            form.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle rect = new Rectangle(0, 0, form.Width - 1, form.Height - 1);
+                using (GraphicsPath path = GetRoundedPath(rect, 12))
+                using (SolidBrush brush = new SolidBrush(BgColor))
                 {
-                    rainbowHue = (rainbowHue + 1.5f) % 360f;
-                    Accent = ColorFromHsv(rainbowHue, 0.85, 1.0);
-                    AccentHover = ColorFromHsv((rainbowHue + 12f) % 360f, 0.85, 1.0);
-                    BorderColor = ColorFromHsv(rainbowHue, 0.45, 0.45);
-                    OnRainbowTick?.Invoke();
+                    form.Region = new Region(path);
+                    e.Graphics.FillPath(brush, path);
+                    using (Pen pen = new Pen(BorderColor, 1f))
+                    {
+                        e.Graphics.DrawPath(pen, path);
+                    }
                 }
             };
 
-            LoadSavedTheme();
+            form.Resize += (s, e) =>
+            {
+                if (form.Width < 32 || form.Height < 32) return;
+                form.Region = new Region(GetRoundedPath(new Rectangle(0, 0, form.Width - 1, form.Height - 1), 12));
+                form.Invalidate();
+            };
+
+            SetDropShadow(form);
+
+            Action listener = () =>
+            {
+                form.BackColor = BgColor;
+                form.Invalidate(true);
+            };
+            OnThemeChanged += listener;
+            form.FormClosed += (s, e) => OnThemeChanged -= listener;
         }
 
         public static void SetTheme(LauncherTheme theme, Form activeForm = null, Color? customColor = null)
         {
             CurrentTheme = theme;
 
-            if (theme != LauncherTheme.Rainbow)
-                rainbowTimer.Stop();
+            if (theme != LauncherTheme.Rainbow) rainbowTimer.Stop();
+            else rainbowTimer.Start();
 
             if (activeForm != null)
             {
-                if (theme == LauncherTheme.Transparent)
-                    activeForm.Opacity = 0.82;
-                else
-                    activeForm.Opacity = 1.0;
+                activeForm.Opacity = theme == LauncherTheme.Transparent ? 0.94 : 1.0;
             }
 
             if (customColor.HasValue)
-                CustomColorValue = customColor.Value;
+            {
+                Color source = customColor.Value;
+                int gray = (source.R * 299 + source.G * 587 + source.B * 114) / 1000;
+                CustomColorValue = Color.FromArgb(gray, gray, gray);
+            }
 
             switch (theme)
             {
                 case LauncherTheme.FullDark:
-                    BgColor = Color.FromArgb(2, 2, 4);
-                    SurfaceColor = Color.FromArgb(10, 10, 14);
-                    SurfaceHighlight = Color.FromArgb(18, 18, 24);
-                    BorderColor = Color.FromArgb(32, 32, 42);
-                    Accent = Color.FromArgb(120, 120, 140);
-                    AccentHover = Color.FromArgb(160, 160, 180);
-                    TextPrimary = Color.FromArgb(240, 240, 245);
-                    TextSecondary = Color.FromArgb(150, 150, 165);
-                    TextMuted = Color.FromArgb(85, 85, 100);
+                    ApplyPalette(Color.FromArgb(5, 5, 5), Color.FromArgb(13, 13, 13), Color.FromArgb(21, 21, 21));
                     break;
 
                 case LauncherTheme.FullWhite:
-                    BgColor = Color.FromArgb(242, 244, 248);
+                    BgColor = Color.FromArgb(245, 245, 245);
                     SurfaceColor = Color.FromArgb(255, 255, 255);
-                    SurfaceHighlight = Color.FromArgb(232, 236, 242);
-                    BorderColor = Color.FromArgb(205, 212, 224);
-                    Accent = Color.FromArgb(0, 165, 110);
-                    AccentHover = Color.FromArgb(0, 195, 130);
-                    TextPrimary = Color.FromArgb(18, 22, 30);
-                    TextSecondary = Color.FromArgb(80, 92, 110);
-                    TextMuted = Color.FromArgb(135, 145, 160);
-                    break;
-
-                case LauncherTheme.Rainbow:
-                    BgColor = Color.FromArgb(12, 12, 16);
-                    SurfaceColor = Color.FromArgb(20, 20, 28);
-                    SurfaceHighlight = Color.FromArgb(30, 30, 42);
-                    TextPrimary = Color.FromArgb(250, 250, 250);
-                    TextSecondary = Color.FromArgb(180, 180, 200);
-                    TextMuted = Color.FromArgb(110, 110, 130);
-                    rainbowTimer.Start();
-                    break;
-
-                case LauncherTheme.Emerald:
-                    BgColor = Color.FromArgb(8, 16, 12);
-                    SurfaceColor = Color.FromArgb(14, 26, 20);
-                    SurfaceHighlight = Color.FromArgb(20, 38, 28);
-                    BorderColor = Color.FromArgb(32, 60, 44);
-                    Accent = Color.FromArgb(16, 212, 128);
-                    AccentHover = Color.FromArgb(40, 235, 150);
-                    TextPrimary = Color.FromArgb(245, 252, 248);
-                    TextSecondary = Color.FromArgb(135, 165, 150);
-                    TextMuted = Color.FromArgb(85, 110, 98);
-                    break;
-
-                case LauncherTheme.OceanBlue:
-                    BgColor = Color.FromArgb(8, 14, 24);
-                    SurfaceColor = Color.FromArgb(14, 22, 36);
-                    SurfaceHighlight = Color.FromArgb(20, 32, 52);
-                    BorderColor = Color.FromArgb(34, 52, 82);
-                    Accent = Color.FromArgb(30, 144, 255);
-                    AccentHover = Color.FromArgb(65, 170, 255);
-                    TextPrimary = Color.FromArgb(245, 248, 255);
-                    TextSecondary = Color.FromArgb(135, 155, 185);
-                    TextMuted = Color.FromArgb(85, 105, 130);
-                    break;
-
-                case LauncherTheme.Cyan:
-                    BgColor = Color.FromArgb(8, 18, 20);
-                    SurfaceColor = Color.FromArgb(12, 28, 32);
-                    SurfaceHighlight = Color.FromArgb(18, 42, 48);
-                    BorderColor = Color.FromArgb(30, 68, 76);
-                    Accent = Color.FromArgb(0, 225, 235);
-                    AccentHover = Color.FromArgb(40, 245, 255);
-                    TextPrimary = Color.FromArgb(245, 254, 255);
-                    TextSecondary = Color.FromArgb(130, 165, 175);
-                    TextMuted = Color.FromArgb(80, 115, 125);
-                    break;
-
-                case LauncherTheme.CrimsonRed:
-                    BgColor = Color.FromArgb(18, 8, 10);
-                    SurfaceColor = Color.FromArgb(28, 14, 18);
-                    SurfaceHighlight = Color.FromArgb(42, 20, 26);
-                    BorderColor = Color.FromArgb(68, 30, 38);
-                    Accent = Color.FromArgb(255, 55, 75);
-                    AccentHover = Color.FromArgb(255, 90, 105);
-                    TextPrimary = Color.FromArgb(255, 245, 246);
-                    TextSecondary = Color.FromArgb(180, 140, 145);
-                    TextMuted = Color.FromArgb(120, 85, 90);
-                    break;
-
-                case LauncherTheme.CyberPink:
-                    BgColor = Color.FromArgb(18, 8, 16);
-                    SurfaceColor = Color.FromArgb(28, 14, 24);
-                    SurfaceHighlight = Color.FromArgb(42, 20, 36);
-                    BorderColor = Color.FromArgb(68, 30, 58);
-                    Accent = Color.FromArgb(255, 60, 170);
-                    AccentHover = Color.FromArgb(255, 100, 195);
-                    TextPrimary = Color.FromArgb(255, 245, 252);
-                    TextSecondary = Color.FromArgb(180, 140, 170);
-                    TextMuted = Color.FromArgb(120, 85, 110);
-                    break;
-
-                case LauncherTheme.ElectricViolet:
-                    BgColor = Color.FromArgb(14, 8, 22);
-                    SurfaceColor = Color.FromArgb(22, 14, 34);
-                    SurfaceHighlight = Color.FromArgb(34, 22, 52);
-                    BorderColor = Color.FromArgb(56, 34, 84);
-                    Accent = Color.FromArgb(170, 75, 255);
-                    AccentHover = Color.FromArgb(195, 115, 255);
-                    TextPrimary = Color.FromArgb(250, 245, 255);
-                    TextSecondary = Color.FromArgb(170, 145, 190);
-                    TextMuted = Color.FromArgb(115, 90, 135);
-                    break;
-
-                case LauncherTheme.SunsetOrange:
-                    BgColor = Color.FromArgb(20, 10, 6);
-                    SurfaceColor = Color.FromArgb(30, 16, 10);
-                    SurfaceHighlight = Color.FromArgb(46, 26, 16);
-                    BorderColor = Color.FromArgb(74, 42, 24);
-                    Accent = Color.FromArgb(255, 115, 30);
-                    AccentHover = Color.FromArgb(255, 145, 65);
-                    TextPrimary = Color.FromArgb(255, 248, 242);
-                    TextSecondary = Color.FromArgb(185, 150, 130);
-                    TextMuted = Color.FromArgb(125, 95, 80);
-                    break;
-
-                case LauncherTheme.SolarGold:
-                    BgColor = Color.FromArgb(18, 14, 6);
-                    SurfaceColor = Color.FromArgb(28, 22, 10);
-                    SurfaceHighlight = Color.FromArgb(44, 34, 16);
-                    BorderColor = Color.FromArgb(72, 56, 26);
-                    Accent = Color.FromArgb(255, 195, 0);
-                    AccentHover = Color.FromArgb(255, 215, 50);
-                    TextPrimary = Color.FromArgb(255, 252, 240);
-                    TextSecondary = Color.FromArgb(185, 170, 135);
-                    TextMuted = Color.FromArgb(120, 110, 85);
-                    break;
-
-                case LauncherTheme.Mint:
-                    BgColor = Color.FromArgb(8, 18, 16);
-                    SurfaceColor = Color.FromArgb(12, 28, 24);
-                    SurfaceHighlight = Color.FromArgb(18, 42, 36);
-                    BorderColor = Color.FromArgb(28, 66, 56);
-                    Accent = Color.FromArgb(45, 230, 180);
-                    AccentHover = Color.FromArgb(85, 245, 205);
-                    TextPrimary = Color.FromArgb(245, 255, 252);
-                    TextSecondary = Color.FromArgb(135, 175, 165);
-                    TextMuted = Color.FromArgb(85, 120, 110);
+                    SurfaceHighlight = Color.FromArgb(236, 236, 236);
+                    BorderColor = Color.FromArgb(212, 212, 212);
+                    Accent = Color.FromArgb(10, 10, 10);
+                    AccentHover = Color.FromArgb(51, 51, 51);
+                    Danger = Color.FromArgb(85, 85, 85);
+                    Warning = Color.FromArgb(102, 102, 102);
+                    TextPrimary = Color.FromArgb(10, 10, 10);
+                    TextSecondary = Color.FromArgb(51, 51, 51);
+                    TextMuted = Color.FromArgb(102, 102, 102);
                     break;
 
                 case LauncherTheme.Custom:
-                    int r = CustomColorValue.R;
-                    int g = CustomColorValue.G;
-                    int b = CustomColorValue.B;
-                    BgColor = Color.FromArgb(Math.Max(6, r / 16), Math.Max(6, g / 16), Math.Max(8, b / 16));
-                    SurfaceColor = Color.FromArgb(Math.Max(12, r / 10), Math.Max(12, g / 10), Math.Max(16, b / 10));
-                    SurfaceHighlight = Color.FromArgb(Math.Max(20, r / 7), Math.Max(20, g / 7), Math.Max(26, b / 7));
-                    BorderColor = Color.FromArgb(Math.Max(35, r / 4), Math.Max(35, g / 4), Math.Max(45, b / 4));
-                    Accent = CustomColorValue;
-                    AccentHover = ControlPaint.Light(CustomColorValue, 0.25f);
-                    TextPrimary = Color.FromArgb(245, 247, 250);
-                    TextSecondary = Color.FromArgb(160, 165, 180);
-                    TextMuted = Color.FromArgb(100, 105, 120);
+                    int level = CustomColorValue.R;
+                    ApplyPalette(
+                        Color.FromArgb(Math.Max(6, level / 12), Math.Max(6, level / 12), Math.Max(6, level / 12)),
+                        Color.FromArgb(Math.Max(12, level / 8), Math.Max(12, level / 8), Math.Max(12, level / 8)),
+                        Color.FromArgb(Math.Max(18, level / 5), Math.Max(18, level / 5), Math.Max(18, level / 5)));
+                    break;
+
+                case LauncherTheme.Emerald:
+                    ApplyPalette(Color.FromArgb(9, 9, 9), Color.FromArgb(17, 17, 17), Color.FromArgb(25, 25, 25));
+                    break;
+
+                case LauncherTheme.OceanBlue:
+                    ApplyPalette(Color.FromArgb(8, 8, 8), Color.FromArgb(15, 15, 15), Color.FromArgb(23, 23, 23));
+                    break;
+
+                case LauncherTheme.Cyan:
+                    ApplyPalette(Color.FromArgb(9, 9, 9), Color.FromArgb(16, 16, 16), Color.FromArgb(24, 24, 24));
+                    break;
+
+                case LauncherTheme.CrimsonRed:
+                    ApplyPalette(Color.FromArgb(11, 11, 11), Color.FromArgb(19, 19, 19), Color.FromArgb(27, 27, 27));
+                    break;
+
+                case LauncherTheme.CyberPink:
+                    ApplyPalette(Color.FromArgb(10, 10, 10), Color.FromArgb(18, 18, 18), Color.FromArgb(26, 26, 26));
+                    break;
+
+                case LauncherTheme.ElectricViolet:
+                    ApplyPalette(Color.FromArgb(9, 9, 9), Color.FromArgb(16, 16, 16), Color.FromArgb(24, 24, 24));
+                    break;
+
+                case LauncherTheme.SunsetOrange:
+                    ApplyPalette(Color.FromArgb(11, 11, 11), Color.FromArgb(19, 19, 19), Color.FromArgb(27, 27, 27));
+                    break;
+
+                case LauncherTheme.SolarGold:
+                    ApplyPalette(Color.FromArgb(10, 10, 10), Color.FromArgb(18, 18, 18), Color.FromArgb(26, 26, 26));
+                    break;
+
+                case LauncherTheme.Mint:
+                    ApplyPalette(Color.FromArgb(8, 8, 8), Color.FromArgb(16, 16, 16), Color.FromArgb(24, 24, 24));
                     break;
 
                 case LauncherTheme.Transparent:
+                case LauncherTheme.Rainbow:
                 case LauncherTheme.DefaultDark:
                 default:
-                    BgColor = Color.FromArgb(10, 12, 16);
-                    SurfaceColor = Color.FromArgb(17, 20, 28);
-                    SurfaceHighlight = Color.FromArgb(26, 31, 44);
-                    BorderColor = Color.FromArgb(38, 44, 62);
-                    Accent = Color.FromArgb(0, 230, 153);
-                    AccentHover = Color.FromArgb(0, 255, 170);
-                    TextPrimary = Color.FromArgb(245, 247, 250);
-                    TextSecondary = Color.FromArgb(130, 140, 160);
-                    TextMuted = Color.FromArgb(85, 95, 115);
+                    ApplyPalette(Color.FromArgb(10, 10, 10), Color.FromArgb(20, 20, 20), Color.FromArgb(28, 28, 28));
                     break;
             }
 
             SaveCurrentTheme();
+            RefreshThemedButtons();
             OnThemeChanged?.Invoke();
+        }
+
+        private static void ApplyPalette(Color bg, Color surface, Color highlight)
+        {
+            BgColor = bg;
+            SurfaceColor = surface;
+            SurfaceHighlight = highlight;
+            BorderColor = blendColor(highlight, Color.White, 0.10f);
+            Accent = Color.FromArgb(255, 255, 255);
+            AccentHover = Color.FromArgb(230, 230, 230);
+            Danger = Color.FromArgb(154, 154, 154);
+            Warning = Color.FromArgb(176, 176, 176);
+            TextPrimary = Color.FromArgb(255, 255, 255);
+            TextSecondary = Color.FromArgb(184, 184, 184);
+            TextMuted = Color.FromArgb(124, 124, 124);
+        }
+
+        private static void RefreshThemedButtons()
+        {
+            foreach (KeyValuePair<Button, ButtonRole> pair in buttonRoles)
+            {
+                Button btn = pair.Key;
+                if (btn == null || btn.IsDisposed) continue;
+                Color baseColor = RoleColor(pair.Value.Kind);
+                btn.BackColor = btn.Enabled ? baseColor : blendColor(baseColor, BgColor, 0.52f);
+                btn.ForeColor = pair.Value.Kind == ButtonKind.Primary ? Color.FromArgb(10, 10, 10) : TextPrimary;
+                btn.Invalidate();
+            }
+        }
+
+        private static Color RoleColor(ButtonKind kind)
+        {
+            switch (kind)
+            {
+                case ButtonKind.Primary: return Accent;
+                case ButtonKind.Danger: return Color.FromArgb(26, 26, 26);
+                case ButtonKind.Subtle: return Color.Transparent;
+                default: return SurfaceHighlight;
+            }
         }
 
         private static void SaveCurrentTheme()
@@ -366,9 +294,7 @@ namespace ProjectOLDR.UI
             {
                 string dir = Path.GetDirectoryName(ThemeSavePath);
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
-                string data = $"{CurrentTheme};{CustomColorValue.ToArgb()}";
-                File.WriteAllText(ThemeSavePath, data);
+                File.WriteAllText(ThemeSavePath, CurrentTheme + ";" + CustomColorValue.ToArgb());
             }
             catch
             {
@@ -379,15 +305,14 @@ namespace ProjectOLDR.UI
         {
             try
             {
-                if (File.Exists(ThemeSavePath))
+                if (!File.Exists(ThemeSavePath)) return;
+                string[] parts = File.ReadAllText(ThemeSavePath).Trim().Split(';');
+                if (parts.Length >= 2 && Enum.TryParse(parts[0], out LauncherTheme theme) && int.TryParse(parts[1], out int argb))
                 {
-                    string content = File.ReadAllText(ThemeSavePath).Trim();
-                    string[] parts = content.Split(';');
-                    if (parts.Length >= 2 && Enum.TryParse(parts[0], out LauncherTheme theme) && int.TryParse(parts[1], out int argb))
-                    {
-                        CustomColorValue = Color.FromArgb(argb);
-                        SetTheme(theme, null, CustomColorValue);
-                    }
+                    Color source = Color.FromArgb(argb);
+                    int gray = (source.R * 299 + source.G * 587 + source.B * 114) / 1000;
+                    CustomColorValue = Color.FromArgb(gray, gray, gray);
+                    SetTheme(theme, null, CustomColorValue);
                 }
             }
             catch
@@ -395,23 +320,13 @@ namespace ProjectOLDR.UI
             }
         }
 
-        private static Color ColorFromHsv(double hue, double saturation, double value)
+        public static Color blendColor(Color from, Color to, float amount)
         {
-            int hi = Convert.ToInt32(Math.Floor(hue / 60)) % 6;
-            double f = hue / 60 - Math.Floor(hue / 60);
-
-            value = value * 255;
-            int v = Convert.ToInt32(value);
-            int p = Convert.ToInt32(value * (1 - saturation));
-            int q = Convert.ToInt32(value * (1 - f * saturation));
-            int t = Convert.ToInt32(value * (1 - (1 - f) * saturation));
-
-            if (hi == 0) return Color.FromArgb(255, v, t, p);
-            if (hi == 1) return Color.FromArgb(255, q, v, p);
-            if (hi == 2) return Color.FromArgb(255, p, v, t);
-            if (hi == 3) return Color.FromArgb(255, p, q, v);
-            if (hi == 4) return Color.FromArgb(255, t, p, v);
-            return Color.FromArgb(255, v, p, q);
+            amount = Math.Max(0f, Math.Min(1f, amount));
+            int r = (int)(from.R + (to.R - from.R) * amount);
+            int g = (int)(from.G + (to.G - from.G) * amount);
+            int b = (int)(from.B + (to.B - from.B) * amount);
+            return Color.FromArgb(r, g, b);
         }
 
         [DllImport("user32.dll")]
@@ -419,6 +334,29 @@ namespace ProjectOLDR.UI
 
         [DllImport("user32.dll")]
         public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+        private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        private const int GclStyle = -26;
+        private const int CsDropShadow = 0x00020000;
+
+        public static void SetDropShadow(Form form)
+        {
+            try
+            {
+                IntPtr handle = form.Handle;
+                IntPtr style = GetWindowLongPtr(handle, GclStyle);
+                long value = style.ToInt64() | CsDropShadow;
+                SetWindowLongPtr(handle, GclStyle, new IntPtr(value));
+            }
+            catch
+            {
+            }
+        }
 
         public static void DragWindow(IntPtr handle)
         {
@@ -429,7 +367,9 @@ namespace ProjectOLDR.UI
         public static GraphicsPath GetRoundedPath(Rectangle rect, int radius)
         {
             GraphicsPath path = new GraphicsPath();
-            int d = radius * 2;
+            int d = Math.Max(1, radius * 2);
+            if (d > rect.Width) d = rect.Width;
+            if (d > rect.Height) d = rect.Height;
             path.AddArc(rect.X, rect.Y, d, d, 180, 90);
             path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
             path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
@@ -443,68 +383,96 @@ namespace ProjectOLDR.UI
             Panel bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 42,
+                Height = 44,
                 BackColor = SurfaceColor
             };
 
             bar.Paint += (s, e) =>
             {
-                bar.BackColor = SurfaceColor;
-                using (Pen borderPen = new Pen(BorderColor, 1f))
-                    e.Graphics.DrawLine(borderPen, 0, bar.Height - 1, bar.Width, bar.Height - 1);
-
-                IconRenderer.DrawGamepad(e.Graphics, new Rectangle(14, 13, 16, 16), Accent);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (SolidBrush bg = new SolidBrush(SurfaceColor))
+                {
+                    e.Graphics.FillRectangle(bg, 0, 0, bar.Width, bar.Height);
+                }
+                using (Pen border = new Pen(BorderColor, 1f))
+                {
+                    e.Graphics.DrawLine(border, 0, bar.Height - 1, bar.Width, bar.Height - 1);
+                }
+                FluentIcons.Draw(e.Graphics, FluentIcon.Gamepad,
+                    new Rectangle(16, (bar.Height - IconSize) / 2, IconSize, IconSize), Accent, 1.15f);
             };
 
             bar.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) DragWindow(parent.Handle); };
 
             Label lbl = new Label
             {
-                Text = titleText.ToUpper(),
+                Text = titleText,
+                Font = BodyStrong,
                 ForeColor = TextSecondary,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                Location = new Point(38, 13),
+                Location = new Point(42, 12),
                 AutoSize = true,
                 BackColor = Color.Transparent
             };
             lbl.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) DragWindow(parent.Handle); };
             bar.Controls.Add(lbl);
 
-            Button closeBtn = new Button
-            {
-                Text = "✕",
-                Font = new Font("Segoe UI", 9f),
-                ForeColor = TextSecondary,
-                BackColor = Color.Transparent,
-                FlatStyle = FlatStyle.Flat,
-                Size = new Size(42, 42),
-                Dock = DockStyle.Right,
-                Cursor = Cursors.Hand
-            };
-            closeBtn.FlatAppearance.BorderSize = 0;
-            closeBtn.MouseEnter += (s, e) => { closeBtn.BackColor = Danger; closeBtn.ForeColor = Color.White; };
-            closeBtn.MouseLeave += (s, e) => { closeBtn.BackColor = Color.Transparent; closeBtn.ForeColor = TextSecondary; };
-            closeBtn.Click += (s, e) => parent.Close();
-            bar.Controls.Add(closeBtn);
+            bar.Controls.Add(CreateWindowButton(parent, FluentIcon.Close, true));
+            bar.Controls.Add(CreateWindowButton(parent, FluentIcon.Minimize, false));
 
-            Button minBtn = new Button
-            {
-                Text = "—",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = TextSecondary,
-                BackColor = Color.Transparent,
-                FlatStyle = FlatStyle.Flat,
-                Size = new Size(42, 42),
-                Dock = DockStyle.Right,
-                Cursor = Cursors.Hand
-            };
-            minBtn.FlatAppearance.BorderSize = 0;
-            minBtn.MouseEnter += (s, e) => { minBtn.BackColor = SurfaceHighlight; minBtn.ForeColor = TextPrimary; };
-            minBtn.MouseLeave += (s, e) => { minBtn.BackColor = Color.Transparent; minBtn.ForeColor = TextSecondary; };
-            minBtn.Click += (s, e) => parent.WindowState = FormWindowState.Minimized;
-            bar.Controls.Add(minBtn);
+            Action listener = () => bar.Invalidate();
+            OnThemeChanged += listener;
+            bar.Disposed += (s, e) => OnThemeChanged -= listener;
 
             return bar;
+        }
+
+        private static Button CreateWindowButton(Form parent, FluentIcon icon, bool isClose)
+        {
+            Button btn = new Button
+            {
+                Dock = DockStyle.Right,
+                Width = 44,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.Transparent,
+                ForeColor = TextMuted,
+                Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseDownBackColor = Color.Transparent;
+            btn.FlatAppearance.MouseOverBackColor = Color.Transparent;
+
+            btn.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                if (btn.BackColor != Color.Transparent)
+                {
+                    using (SolidBrush bg = new SolidBrush(btn.BackColor))
+                    {
+                        e.Graphics.FillRectangle(bg, 0, 0, btn.Width, btn.Height);
+                    }
+                }
+                FluentIcons.Draw(e.Graphics, icon,
+                    new Rectangle((btn.Width - IconSize) / 2, (btn.Height - IconSize) / 2, IconSize, IconSize),
+                    btn.ForeColor, 1.15f);
+            };
+
+            btn.MouseEnter += (s, e) =>
+            {
+                btn.BackColor = isClose ? Color.FromArgb(48, 48, 48) : SurfaceHighlight;
+                btn.ForeColor = Color.White;
+            };
+            btn.MouseLeave += (s, e) =>
+            {
+                btn.BackColor = Color.Transparent;
+                btn.ForeColor = TextMuted;
+            };
+            btn.Click += (s, e) =>
+            {
+                if (isClose) parent.Close();
+                else parent.WindowState = FormWindowState.Minimized;
+            };
+
+            return btn;
         }
 
         public static Panel CreateContainer(int x, int y, int width, int height)
@@ -518,34 +486,64 @@ namespace ProjectOLDR.UI
 
             card.Paint += (s, e) =>
             {
-                card.BackColor = SurfaceColor;
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 Rectangle rect = new Rectangle(0, 0, card.Width - 1, card.Height - 1);
-                using (GraphicsPath path = GetRoundedPath(rect, 8))
-                using (Pen pen = new Pen(BorderColor, 1.2f))
+                using (GraphicsPath path = GetRoundedPath(rect, 10))
                 {
                     card.Region = new Region(path);
-                    e.Graphics.DrawPath(pen, path);
+                    using (SolidBrush brush = new SolidBrush(SurfaceColor))
+                    {
+                        e.Graphics.FillPath(brush, path);
+                    }
+                    using (Pen pen = new Pen(BorderColor, 1f))
+                    {
+                        e.Graphics.DrawPath(pen, path);
+                    }
                 }
             };
+
+            card.Resize += (s, e) =>
+            {
+                if (card.Width < 8 || card.Height < 8) return;
+                card.Region = new Region(GetRoundedPath(new Rectangle(0, 0, card.Width - 1, card.Height - 1), 10));
+            };
+
+            Action listener = () => card.Invalidate();
+            OnThemeChanged += listener;
+            card.Disposed += (s, e) => OnThemeChanged -= listener;
 
             return card;
         }
 
-        public static Button CreateStyledButton(string text, int x, int y, int width, int height, Color bg, Color hover)
+        public static Panel CreateCard(int width, int height)
         {
+            return CreateContainer(0, 0, width, height);
+        }
+
+        public static Button CreateStyledButton(string text, int x, int y, int width, int height, Color bg, Color hover, string role = "")
+        {
+            return CreateButton(text, null, x, y, width, height, ButtonKind.Secondary);
+        }
+
+        public static Button CreateButton(string text, FluentIcon? icon, int x, int y, int width, int height, ButtonKind kind)
+        {
+            Color bg = RoleColor(kind);
             Button btn = new Button
             {
                 Text = text,
                 Location = new Point(x, y),
                 Size = new Size(width, height),
                 BackColor = bg,
-                ForeColor = TextPrimary,
-                Font = HeaderMedium,
+                ForeColor = kind == ButtonKind.Primary ? Color.FromArgb(10, 10, 10) : TextPrimary,
+                Font = BodyStrong,
                 FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                TextAlign = ContentAlignment.MiddleCenter
             };
             btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseDownBackColor = bg;
+            btn.FlatAppearance.MouseOverBackColor = bg;
+            buttonRoles[btn] = new ButtonRole { Kind = kind, Icon = icon };
 
             btn.Paint += (s, e) =>
             {
@@ -554,27 +552,293 @@ namespace ProjectOLDR.UI
                 using (GraphicsPath path = GetRoundedPath(rect, 6))
                 {
                     btn.Region = new Region(path);
+                    Color fill = btn.Enabled ? btn.BackColor : blendColor(btn.BackColor, BgColor, 0.52f);
+                    if (kind == ButtonKind.Subtle && btn.BackColor == Color.Transparent) fill = Color.Transparent;
+                    if (fill != Color.Transparent)
+                    {
+                        using (SolidBrush brush = new SolidBrush(fill))
+                        {
+                            e.Graphics.FillPath(brush, path);
+                        }
+                    }
+                    if (kind != ButtonKind.Primary && kind != ButtonKind.Subtle)
+                    {
+                        using (Pen pen = new Pen(BorderColor, 1f))
+                        {
+                            e.Graphics.DrawPath(pen, path);
+                        }
+                    }
+                }
+
+                Color textColor = btn.Enabled ? btn.ForeColor : TextMuted;
+                if (icon.HasValue)
+                {
+                    Size textSize = TextRenderer.MeasureText(btn.Text, btn.Font);
+                    int totalWidth = IconSize + 8 + textSize.Width;
+                    int start = Math.Max(8, (btn.Width - totalWidth) / 2);
+                    FluentIcons.DrawGlyph(e.Graphics, icon.Value,
+                        new Rectangle(start, (btn.Height - IconSize) / 2, IconSize, IconSize), textColor, IconSize);
+                    Rectangle textRect = new Rectangle(start + IconSize + 8, 0, textSize.Width + 4, btn.Height);
+                    TextRenderer.DrawText(e.Graphics, btn.Text, btn.Font, textRect, textColor,
+                        TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+                }
+                else
+                {
+                    TextRenderer.DrawText(e.Graphics, btn.Text, btn.Font, btn.ClientRectangle, textColor,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
                 }
             };
 
-            btn.MouseEnter += (s, e) => btn.BackColor = hover;
-            btn.MouseLeave += (s, e) => btn.BackColor = bg;
+            btn.MouseEnter += (s, e) =>
+            {
+                if (!btn.Enabled) return;
+                if (kind == ButtonKind.Primary) btn.BackColor = AccentHover;
+                else if (kind == ButtonKind.Danger) btn.BackColor = Color.FromArgb(42, 42, 42);
+                else btn.BackColor = SurfaceHighlight;
+            };
+            btn.MouseLeave += (s, e) => btn.BackColor = btn.Enabled ? RoleColor(kind) : blendColor(RoleColor(kind), BgColor, 0.52f);
+            btn.EnabledChanged += (s, e) => btn.BackColor = btn.Enabled ? RoleColor(kind) : blendColor(RoleColor(kind), BgColor, 0.52f);
+            btn.Disposed += (s, e) => buttonRoles.Remove(btn);
+
+            return btn;
+        }
+
+        public static Button CreatePrimaryButton(string text, int x, int y, int width, int height)
+        {
+            return CreateButton(text, null, x, y, width, height, ButtonKind.Primary);
+        }
+
+        public static Button CreateSecondaryButton(string text, int x, int y, int width, int height)
+        {
+            return CreateButton(text, null, x, y, width, height, ButtonKind.Secondary);
+        }
+
+        public static Button CreateDangerButton(string text, int x, int y, int width, int height)
+        {
+            return CreateButton(text, FluentIcon.Delete, x, y, width, height, ButtonKind.Danger);
+        }
+
+        public static Button CreateNavButton(FluentIcon icon, string text, int x, int y, int width, int height, bool selected = false)
+        {
+            Button btn = new Button
+            {
+                Location = new Point(x, y),
+                Size = new Size(width, height),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.Transparent,
+                ForeColor = selected ? TextPrimary : TextMuted,
+                Font = Caption,
+                Cursor = Cursors.Hand,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseDownBackColor = Color.Transparent;
+            btn.FlatAppearance.MouseOverBackColor = Color.Transparent;
+
+            bool isSelected = selected;
+            btn.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                if (isSelected)
+                {
+                    using (GraphicsPath path = GetRoundedPath(new Rectangle(0, 0, btn.Width - 1, btn.Height - 1), 6))
+                    using (SolidBrush bg = new SolidBrush(SurfaceHighlight))
+                    {
+                        e.Graphics.FillPath(bg, path);
+                    }
+                    using (SolidBrush bar = new SolidBrush(Accent))
+                    {
+                        e.Graphics.FillRectangle(bar, 0, 10, 2, btn.Height - 20);
+                    }
+                }
+                else if (btn.BackColor != Color.Transparent)
+                {
+                    using (GraphicsPath path = GetRoundedPath(new Rectangle(0, 0, btn.Width - 1, btn.Height - 1), 6))
+                    using (SolidBrush bg = new SolidBrush(btn.BackColor))
+                    {
+                        e.Graphics.FillPath(bg, path);
+                    }
+                }
+                FluentIcons.DrawGlyph(e.Graphics, icon,
+                    new Rectangle(16, (btn.Height - IconSize) / 2, IconSize, IconSize), btn.ForeColor, IconSize);
+                TextRenderer.DrawText(e.Graphics, text, btn.Font, new Rectangle(38, 0, btn.Width - 46, btn.Height), btn.ForeColor,
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
+            };
+
+            btn.MouseEnter += (s, e) =>
+            {
+                btn.BackColor = SurfaceHighlight;
+                btn.ForeColor = TextPrimary;
+            };
+            btn.MouseLeave += (s, e) =>
+            {
+                btn.BackColor = Color.Transparent;
+                btn.ForeColor = isSelected ? TextPrimary : TextMuted;
+            };
+
+            return btn;
+        }
+
+        public static Button CreateIconButton(FluentIcon icon, int x, int y, int size, string tooltip = "")
+        {
+            Button btn = new Button
+            {
+                Location = new Point(x, y),
+                Size = new Size(size, size),
+                BackColor = Color.Transparent,
+                ForeColor = TextMuted,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseDownBackColor = Color.Transparent;
+            btn.FlatAppearance.MouseOverBackColor = Color.Transparent;
+            if (!string.IsNullOrEmpty(tooltip)) btn.Tag = tooltip;
+
+            btn.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                if (btn.BackColor != Color.Transparent)
+                {
+                    using (GraphicsPath path = GetRoundedPath(new Rectangle(0, 0, btn.Width - 1, btn.Height - 1), 6))
+                    using (SolidBrush bg = new SolidBrush(btn.BackColor))
+                    {
+                        e.Graphics.FillPath(bg, path);
+                    }
+                }
+                FluentIcons.Draw(e.Graphics, icon,
+                    new Rectangle((btn.Width - IconSize) / 2, (btn.Height - IconSize) / 2, IconSize, IconSize),
+                    btn.ForeColor, 1.15f);
+            };
+
+            btn.MouseEnter += (s, e) => { btn.BackColor = SurfaceHighlight; btn.ForeColor = Accent; };
+            btn.MouseLeave += (s, e) => { btn.BackColor = Color.Transparent; btn.ForeColor = TextMuted; };
 
             return btn;
         }
 
         public static TextBox CreateStyledTextBox(int x, int y, int width, int height, bool password = false)
         {
-            return new TextBox
+            TextBox box = new TextBox
             {
                 Location = new Point(x, y),
                 Size = new Size(width, height),
                 BackColor = SurfaceHighlight,
                 ForeColor = TextPrimary,
-                Font = Regular,
+                Font = Caption,
                 BorderStyle = BorderStyle.FixedSingle,
-                PasswordChar = password ? '●' : '\0'
+                PasswordChar = password ? '\u25CF' : '\0'
             };
+
+            Action listener = () =>
+            {
+                box.BackColor = SurfaceHighlight;
+                box.ForeColor = TextPrimary;
+            };
+            OnThemeChanged += listener;
+            box.Disposed += (s, e) => OnThemeChanged -= listener;
+
+            return box;
+        }
+
+        public static Label CreateLabel(string text, int x, int y, int width, int height, Font font = null, Color? color = null)
+        {
+            return new Label
+            {
+                Text = text,
+                Location = new Point(x, y),
+                Size = new Size(width, height),
+                AutoSize = false,
+                Font = font ?? Regular,
+                ForeColor = color ?? TextSecondary,
+                BackColor = Color.Transparent
+            };
+        }
+
+        public static Panel CreatePill(string text, Color color, int x, int y, int width, int height)
+        {
+            Panel pill = new Panel
+            {
+                Location = new Point(x, y),
+                Size = new Size(width, height),
+                BackColor = Color.Transparent
+            };
+            pill.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Color fill = Color.FromArgb(30, color.R, color.G, color.B);
+                using (GraphicsPath path = GetRoundedPath(new Rectangle(0, 0, pill.Width - 1, pill.Height - 1), height / 2))
+                {
+                    using (SolidBrush bg = new SolidBrush(fill))
+                    {
+                        e.Graphics.FillPath(bg, path);
+                    }
+                    using (Pen pen = new Pen(Color.FromArgb(100, color.R, color.G, color.B), 1f))
+                    {
+                        e.Graphics.DrawPath(pen, path);
+                    }
+                }
+                TextRenderer.DrawText(e.Graphics, text, Small, pill.ClientRectangle, TextSecondary,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            };
+            return pill;
+        }
+
+        private sealed class ToastPanel : Panel
+        {
+            public ToastPanel()
+            {
+                SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            }
+        }
+
+        public static void ShowToast(Form owner, string message, bool success = true)
+        {
+            if (owner == null || owner.IsDisposed) return;
+
+            int width = Math.Min(460, owner.Width - 60);
+            ToastPanel toast = new ToastPanel
+            {
+                Size = new Size(width, 54),
+                Location = new Point((owner.Width - width) / 2, owner.Height - 88),
+                BackColor = Color.Transparent
+            };
+
+            Color accent = success ? Accent : Danger;
+            FluentIcon icon = success ? FluentIcon.Check : FluentIcon.Warning;
+
+            toast.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle rect = new Rectangle(0, 0, toast.Width - 1, toast.Height - 1);
+                using (GraphicsPath path = GetRoundedPath(rect, 8))
+                {
+                    using (SolidBrush bg = new SolidBrush(Color.FromArgb(248, SurfaceColor.R, SurfaceColor.G, SurfaceColor.B)))
+                    {
+                        e.Graphics.FillPath(bg, path);
+                    }
+                    using (Pen pen = new Pen(accent, 1f))
+                    {
+                        e.Graphics.DrawPath(pen, path);
+                    }
+                }
+                FluentIcons.Draw(e.Graphics, icon, new Rectangle(16, (toast.Height - IconSize) / 2, IconSize, IconSize), accent, 1.15f);
+                TextRenderer.DrawText(e.Graphics, message, Caption, new Rectangle(48, 6, toast.Width - 58, toast.Height - 12), TextPrimary,
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            };
+
+            owner.Controls.Add(toast);
+            toast.BringToFront();
+
+            Timer timer = new Timer { Interval = 2800 };
+            timer.Tick += (s, e) =>
+            {
+                timer.Stop();
+                timer.Dispose();
+                if (!toast.IsDisposed) toast.Dispose();
+            };
+            timer.Start();
         }
     }
 }
